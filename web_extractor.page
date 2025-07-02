@@ -8,7 +8,13 @@ Markdown="false"
 
 <?php
 $root = '/mnt/user/';
-$allowedExtensions = ['7z', 'zip', 'rar', 'tar.gz', 'gz'];
+$allowedExtensions = [
+    '7z', 'zip', 'rar', 'tar', 'gz', 'bz2', 'xz', 'lzma', 'z',
+    'cab', 'arj', 'iso', 'udf', 'wim', 'dmg', 'vhd', 'vmdk',
+    'msi', 'deb', 'rpm', 'cpio', 'chm', 'nsis', 'exe',
+    'tar.gz', 'tar.bz2', 'tar.xz', 'tar.zst',
+    'lzh', 'lha', 'ace', 'zst', 'img'
+];
 $extractionResult = '';
 $previewResult = '';
 
@@ -33,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         : $root . ltrim($inputDest, '/');
 
     $filePath = $_POST['selected_file'] ?? '';
+    $confirmed = isset($_POST['proceed']);
 
     if (!$filePath || !file_exists($filePath)) {
         $extractionResult = "<pre>❌ No valid file selected.</pre><hr>";
@@ -48,14 +55,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
             $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
         } elseif (isset($_POST['extract'])) {
-            $cmd = "/usr/bin/7z x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
-            exec($cmd, $output, $resultCode);
-            $extractionResult = "<pre>";
-            $extractionResult .= $resultCode === 0
-                ? "✅ Extraction successful to: " . htmlspecialchars($destination) . "\n"
-                : "❌ Extraction failed (code $resultCode)\n";
-            $extractionResult .= htmlspecialchars(implode("\n", $output));
-            $extractionResult .= "</pre><hr>";
+            // Check for overwrite conflicts using 7z l table parsing
+            $conflicts = [];
+            $files = [];
+            $inListing = false;
+
+            exec("/usr/bin/7z l " . escapeshellarg($filePath), $listing);
+
+            foreach ($listing as $line) {
+                if (preg_match('/^-+$/', $line)) {
+                    $inListing = !$inListing;
+                    continue;
+                }
+
+                if ($inListing && preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
+                    $parts = preg_split('/\s{2,}/', $line);
+                    $filename = end($parts);
+                    if ($filename && substr($filename, -1) !== '/') {
+                        $files[] = $filename;
+                    }
+                }
+            }
+
+            foreach ($files as $relative) {
+                $targetPath = rtrim($destination, '/') . '/' . $relative;
+                if (file_exists($targetPath)) {
+                    $conflicts[] = $relative;
+                }
+            }
+
+            if (count($conflicts) > 0 && !$confirmed) {
+                $extractionResult = "<pre>⚠️ The following files already exist in the destination:\n\n";
+                foreach ($conflicts as $conflict) {
+                    $extractionResult .= " - $conflict\n";
+                }
+                $extractionResult .= "\nPlease confirm to proceed with overwriting.</pre>";
+                $extractionResult .= '<form method="post">';
+                $extractionResult .= '<input type="hidden" name="selected_file" value="' . htmlspecialchars($filePath) . '">';
+                $extractionResult .= '<input type="hidden" name="destination" value="' . htmlspecialchars($destination) . '">';
+                $extractionResult .= '<input type="hidden" name="extract" value="1">';
+                $extractionResult .= '<input type="hidden" name="proceed" value="1">';
+                $extractionResult .= '<input type="submit" value="Proceed Anyway">';
+                $extractionResult .= '</form><hr>';
+            } else {
+                $cmd = "/usr/bin/7z x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
+                exec($cmd, $output, $resultCode);
+                $extractionResult = "<pre>";
+                $extractionResult .= $resultCode === 0
+                    ? "✅ Extraction successful to: " . htmlspecialchars($destination) . "\n"
+                    : "❌ Extraction failed (code $resultCode)\n";
+                $extractionResult .= htmlspecialchars(implode("\n", $output));
+                $extractionResult .= "</pre><hr>";
+            }
         }
     }
 }
@@ -68,22 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <style>
     body { font-family: sans-serif; margin: 2em; }
     label { display: block; margin-top: 1em; }
-    input[type="submit"].orange-button {
-      margin-top: 1em;
-      background-color: #f39c12;
-      color: #fff;
-      border: 1px solid #e08e0b;
-      padding: 0.5em 1.2em;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 600;
-      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-    input[type="submit"].orange-button:hover {
-      background-color: #e08e0b;
-    }
     .folder-list {
       margin-top: 0.5em;
       padding-left: 1em;
@@ -116,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
-  <h2>Extract Archive</h2>
+  <h2>Extract archive using 7z</h2>
   <form action="" method="post">
     <label>Select archive file:
       <input type="text" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>" readonly onclick="window.location='?filepicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
@@ -126,10 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="text" name="destination" value="<?= $selectedDestRel ? htmlspecialchars($root . ltrim($selectedDestRel, '/')) : '' ?>" readonly onclick="window.location='?folderpicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
     </label>
 
-    <?php if ($selectedFile): ?>
-		<input type="submit" name="preview" value="Check Archive">
-		<input type="submit" name="extract" value="Extract">
-    <?php endif; ?>
+      <input type="submit" name="preview" value="Check Archive">
+      <input type="submit" name="extract" value="Extract">
 
     <?php if ($isFilePicker): ?>
     <div class="folder-list">
