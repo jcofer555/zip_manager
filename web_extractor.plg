@@ -1,0 +1,84 @@
+<?xml version='1.0' standalone='yes'?>
+
+<!DOCTYPE PLUGIN [
+<!ENTITY name      "web_extractor">
+<!ENTITY author    "jcofer555">
+<!ENTITY version   "2025.07.01f">
+<!ENTITY launch    "Settings/Web Extractor">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
+<!ENTITY pluginURL "&gitURL;/&name;.plg">
+<!ENTITY pkgURL    "&gitURL;/packages">
+<!ENTITY plgPATH   "/boot/config/plugins/&name;">
+<!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" icon="icon.png">
+
+<CHANGES>
+## p7zip for UNRAID
+###2025.07.01f
+- release note: welcome to the first version of the &name;
+</CHANGES>
+
+<FILE Run="/bin/bash">
+<INLINE>
+killall p7zip >/dev/null 2>&amp;1
+rm -f &plgPATH;/README.md
+exit 0
+</INLINE>
+</FILE>
+
+<!-- plugin package -->
+<FILE Name="&plgPATH;/p7zip-17.05-x86_64-3cf.txz" Min="7.0.0" Run="upgradepkg --install-new">
+<URL>&pkgURL;/p7zip-17.05-x86_64-3cf.txz</URL>
+</FILE>
+
+<FILE Name="&emhttp;/README.md" Mode="0644">
+<INLINE>
+**p7zip for UNRAID**
+
+Extract zip files with an easy to use webui
+</INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/webUI.php" Mode="0644">
+<URL>&gitURL;/webUI.php</URL>
+</FILE>
+
+<FILE Name="&emhttp;/web_extractor.page" Mode="0644">
+<URL>&gitURL;/web_extractor.page</URL>
+</FILE>
+
+<FILE Name="&emhttp;/icon.png" Mode="0644">
+<URL>&gitURL;/icon.png</URL>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+echo ""
+echo "-------------------------------------------------------------"
+echo " p7zip for UNRAID has been installed."
+echo " Version: &version; / Plugin Maintainer: &author;"
+echo "-------------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+killall p7zip >/dev/null 2>&amp;1
+
+removepkg &plgPATH;/*.txz
+rm -rf &plgPATH;
+rm -rf &emhttp;
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " p7zip for UNRAID has been removed."
+echo " Version: &version; / Plugin Maintainer: &author;"
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+</PLUGIN>
