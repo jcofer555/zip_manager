@@ -11,12 +11,12 @@
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.1.0" icon="key">
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.1.0" icon="toolbox">
 
 <CHANGES>
 ## p7zip for UNRAID
 ###2025.07.01
-- release note: welcome to the first version of the "&name;"
+- release note: welcome to the first version of the web_extractor
 </CHANGES>
 
 <FILE Run="/bin/bash">
