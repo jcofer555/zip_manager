@@ -41,8 +41,6 @@ Extract zip files with an easy to use webui
 </INLINE>
 </FILE>
 
-rm -f &emhttp;/web_extractor.page
-
 <FILE Name="&emhttp;/web_extractor.page" Mode="0644">
 <URL>&gitURL;/web_extractor.page</URL>
 </FILE>
