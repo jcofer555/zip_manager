@@ -1,8 +1,8 @@
 Menu="Utilities"
 Type="xmenu"
 Title="Web Archiver"
-Icon="icon.png"
-Tag="icon.png"
+Icon="zip.png"
+Tag="zip.png"
 Markdown="false"
 ---
 
