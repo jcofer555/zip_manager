@@ -22,7 +22,7 @@
 <FILE Run="/bin/bash">
 <INLINE>
 killall p7zip >/dev/null 2>&amp;1
-rm -f &emhttp;/README.md
+rm -f &plgPATH;/README.md
 exit 0
 </INLINE>
 </FILE>
