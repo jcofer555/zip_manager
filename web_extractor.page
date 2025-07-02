@@ -161,8 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="text" name="destination" value="<?= $selectedDestRel ? htmlspecialchars($root . ltrim($selectedDestRel, '/')) : '' ?>" readonly onclick="window.location='?folderpicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
     </label>
 
-      <input type="submit" name="preview" value="Check Archive">
-      <input type="submit" name="extract" value="Extract">
+        <input type="submit" name="preview" value="Check Archive" <?= $selectedFile ? '' : 'disabled' ?>>
+        <input type="submit" name="extract" value="Extract" <?= $selectedFile ? '' : 'disabled' ?>>
 
     <?php if ($isFilePicker): ?>
     <div class="folder-list">
