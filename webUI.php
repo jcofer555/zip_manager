@@ -1,0 +1,39 @@
+<?php
+$plugin = "web_extractor";
+$pluginPath = "/usr/local/emhttp/plugins/$plugin";
+$plgConfigPath = "/boot/config/plugins/$plugin";
+
+$zipFile = $_POST['zipFile'] ?? '';
+$extractTo = $_POST['extractTo'] ?? '';
+$output = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $zipFile && $extractTo) {
+    $zipFile = escapeshellarg($zipFile);
+    $extractTo = escapeshellarg($extractTo);
+    exec("/usr/bin/7z x -o$extractTo $zipFile 2>&1", $out);
+    $output = implode("\n", $out);
+}
+?>
+
+<style>
+    .web-extractor-form { padding: 20px; }
+    .web-extractor-form input[type=text] { width: 100%; padding: 8px; margin: 4px 0; }
+    .web-extractor-form input[type=submit] { padding: 8px 12px; }
+    pre { background-color: #111; color: #0f0; padding: 10px; overflow-x: auto; }
+</style>
+
+<div class="web-extractor-form">
+    <h2>Web Extractor (p7zip)</h2>
+    <form method="POST">
+        <label>ZIP File Path:</label><br>
+        <input type="text" name="zipFile" placeholder="/mnt/user/data/myfile.zip" required value="<?=htmlspecialchars($zipFile)?>"><br>
+        <label>Extract To Directory:</label><br>
+        <input type="text" name="extractTo" placeholder="/mnt/user/data" required value="<?=htmlspecialchars($extractTo)?>"><br>
+        <input type="submit" value="Extract ZIP">
+    </form>
+
+    <?php if ($output): ?>
+        <h3>Output:</h3>
+        <pre><?=htmlspecialchars($output)?></pre>
+    <?php endif; ?>
+</div>
