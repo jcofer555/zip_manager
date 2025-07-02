@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "web_extractor">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.01d">
+<!ENTITY version   "2025.07.01e">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/packages">
@@ -11,11 +11,11 @@
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.0.0" icon="toolbox">
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.0.0" icon="icon.png">
 
 <CHANGES>
 ## p7zip for UNRAID
-###2025.07.01d
+###2025.07.01e
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
@@ -46,6 +46,10 @@ Extract zip files with an easy to use webui
 
 <FILE Name="&emhttp;/web_extractor.page" Mode="0644">
 <URL>&gitURL;/web_extractor.page</URL>
+</FILE>
+
+<FILE Name="&emhttp;/icon.png" Mode="0644">
+<URL>&gitURL;/icon.png</URL>
 </FILE>
 
 <FILE Run="/bin/bash">
