@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "web_extractor">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.02">
+<!ENTITY version   "2025.07.02a">
 <!ENTITY launch    "Settings/web_extractor">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -16,7 +16,7 @@
 
 <CHANGES>
 ## p7zip for UNRAID
-###2025.07.02
+###2025.07.02a
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
