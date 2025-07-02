@@ -1,0 +1,312 @@
+Menu="Utilities"
+Type="xmenu"
+Title="Web Archiver"
+Icon="icon.png"
+Tag="icon.png"
+Markdown="false"
+---
+
+<?php
+$root = '/mnt/';
+$archiveResult = '';
+
+// Helper to format file sizes
+function formatBytes($bytes, $precision = 1) {
+    $units = ['B','KB','MB','GB','TB'];
+    $bytes = max($bytes, 0);
+    $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+    $pow = min($pow, count($units) - 1);
+    return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
+}
+
+$isSourcePicker = isset($_GET['sourcepicker']);
+$isDestPicker = isset($_GET['destpicker']);
+
+// Separate browse states
+$sourcePath = $root;
+$sourceRelPath = '';
+$destPath = $root;
+$destRelPath = '';
+
+if ($isSourcePicker) {
+    $browse = $_GET['browse_sources'] ?? '';
+    $sourcePath = realpath($root . $browse) ?: $root;
+    if (strpos($sourcePath, $root) !== 0 || !is_dir($sourcePath)) $sourcePath = $root;
+    $sourceRelPath = trim(str_replace($root, '', $sourcePath), '/');
+}
+
+if ($isDestPicker) {
+    $browse = $_GET['browse_dest'] ?? '';
+    $destPath = realpath($root . $browse) ?: $root;
+    if (strpos($destPath, $root) !== 0 || !is_dir($destPath)) $destPath = $root;
+    $destRelPath = trim(str_replace($root, '', $destPath), '/');
+}
+
+// Form state
+$format = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? ($_POST['zip_format'] ?? 'zip')
+    : ($_GET['format'] ?? 'zip');
+
+$archiveName = $_GET['name'] ?? $_POST['zip_name'] ?? 'archive';
+$zipSources = array_filter(array_map('trim', explode(',', $_GET['sources'] ?? $_POST['zip_sources'] ?? '')));
+$zipSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', $p), $zipSources));
+$zipDestRel = $_GET['dest'] ?? '';
+$zipDestFull = $zipDestRel ? preg_replace('#/+#', '/', $root . ltrim($zipDestRel, '/')) : '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['clear'])) {
+    echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
+    return;
+}
+
+    if (isset($_POST['create'])) {
+        $sources = $zipSources;
+        $dest = trim($_POST['zip_output_base'] ?? '');
+        $name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $_POST['zip_name'] ?? 'archive');
+        $format = $_POST['zip_format'] ?? 'zip';
+        $outputPath = $dest ? rtrim($dest, '/') . '/' . $name . '.' . ($format === 'tar.gz' ? 'tar.gz' : $format) : '';
+
+        if (!$outputPath || empty($sources)) {
+            $archiveResult = "<pre>❌ Please provide both source paths and a destination folder.</pre><hr>";
+        } elseif (file_exists($outputPath) && !isset($_POST['proceed'])) {
+            $archiveResult = "<pre>⚠️ Archive already exists:\n\n$outputPath\n\nPlease confirm to overwrite.</pre>";
+            $archiveResult .= '<form method="post">';
+            $archiveResult .= '<input type="hidden" name="zip_sources" value="' . htmlspecialchars(implode(',', $sources)) . '">';
+            $archiveResult .= '<input type="hidden" name="zip_output_base" value="' . htmlspecialchars($dest) . '">';
+            $archiveResult .= '<input type="hidden" name="zip_name" value="' . htmlspecialchars($name) . '">';
+            $archiveResult .= '<input type="hidden" name="zip_format" value="' . htmlspecialchars($format) . '">';
+            $archiveResult .= '<input type="hidden" name="proceed" value="1">';
+            $archiveResult .= '<input type="submit" name="create" value="✅ Overwrite">';
+            $archiveResult .= '</form><hr>';
+        } else {
+            $escapedSources = array_map('escapeshellarg', $sources);
+            if ($format === 'tar.gz') {
+                $tempTar = '/tmp/archive_temp.tar';
+                $cmd1 = "/usr/bin/7z a -ttar $tempTar " . implode(' ', $escapedSources);
+                $cmd2 = "/usr/bin/7z a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
+                exec($cmd1, $out1, $code1);
+                exec($cmd2, $out2, $code2);
+                unlink($tempTar);
+                $zipOutput = array_merge($out1, $out2);
+                $zipCode = max($code1, $code2);
+            } else {
+                $cmd = "/usr/bin/7z a -t$format " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
+                exec($cmd, $zipOutput, $zipCode);
+            }
+
+            $archiveResult .= "<pre>";
+            if ($zipCode <= 1) {
+                $archiveResult .= "✅ Archive created at: $outputPath\n";
+            } else {
+                $archiveResult .= "❌ Archive creation failed (code $zipCode)\n";
+            }
+            $archiveResult .= htmlspecialchars(implode("\n", $zipOutput));
+            $archiveResult .= "</pre><hr>";
+        }
+    }
+}
+
+$disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName);
+?>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>7z Archiver</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    .form-row {
+      display: flex;
+      align-items: flex-start;
+      margin-top: 1em;
+    }
+    .form-row label {
+      width: 180px;
+      font-weight: bold;
+      padding-top: 6px;
+    }
+    .form-row input[type="text"],
+    .form-row select {
+      flex: 1;
+      padding: 6px;
+      cursor: pointer;
+    }
+    .folder-list {
+      margin-top: 1em;
+      padding-left: 1em;
+      border-left: 2px solid #ccc;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #fff;
+    }
+    .folder-list a {
+      text-decoration: none;
+      color: orange;
+      background: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: block;
+      margin: 4px 0;
+    }
+    .folder-list a:hover {
+      background: #ffe5cc;
+    }
+    .file-entry {
+      color: green;
+    }
+    .folder-list input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: orange;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Create archive using 7z</h2>
+
+<form method="post">
+  <div class="form-row">
+    <label>Files to include:</label>
+    <input type="text" name="zip_sources_display" readonly
+           value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
+           onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'">
+  </div>
+
+  <div class="form-row">
+    <label>Destination folder:</label>
+    <input type="text" name="zip_output_base_display" readonly
+           value="<?= htmlspecialchars($zipDestFull) ?>"
+           onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'">
+  </div>
+
+  <div class="form-row">
+    <label>Archive name:</label>
+    <input type="text" name="zip_name" value="<?= htmlspecialchars($archiveName) ?>">
+  </div>
+
+  <div class="form-row">
+    <label>Archive format:</label>
+    <select name="zip_format">
+      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP (.zip)</option>
+      <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7-Zip (.7z)</option>
+      <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR (.tar)</option>
+      <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ (.tar.gz)</option>
+    </select>
+  </div>
+
+  <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
+  <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
+
+  <div style="margin-top: 1.5em;">
+    <input type="submit" name="create" value="📦 Create Archive"
+      <?= $disableCreate ? 'disabled style="opacity:0.5; cursor:not-allowed;" title="Please select files and a destination."' : '' ?>>
+    <input type="submit" name="clear" value="🧼 Clear">
+  </div>
+</form>
+
+<?php if ($isSourcePicker): ?>
+<div class="folder-list">
+<?php
+if ($sourcePath !== $root) {
+    $parent = dirname($sourcePath);
+    echo '<a href="?sourcepicker=1&browse_sources=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+         '&sources=' . urlencode(implode(',', $zipSources)) .
+         '&dest=' . urlencode($zipDestRel) .
+         '&name=' . urlencode($archiveName) .
+         '&format=' . urlencode($format) . '">⬆️ Up</a>';
+}
+
+foreach (scandir($sourcePath) as $entry) {
+    $path = $sourcePath . '/' . $entry;
+    if ($entry === '.' || $entry === '..') continue;
+
+    $real = realpath($path);
+    if (!$real || $real === rtrim($root, '/')) continue;
+    $normalized = preg_replace('#/+#', '/', $real);
+    $isSelected = in_array($normalized, $zipSources);
+
+    $newSources = $isSelected
+        ? array_filter($zipSources, fn($s) => $s !== $normalized)
+        : array_merge($zipSources, [$normalized]);
+
+    $newSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', trim($p)), $newSources));
+
+    $toggleUrl = '?sourcepicker=1&browse_sources=' . urlencode($sourceRelPath) .
+                 '&sources=' . urlencode(implode(',', $newSources)) .
+                 '&dest=' . urlencode($zipDestRel) .
+                 '&name=' . urlencode($archiveName) .
+                 '&format=' . urlencode($format);
+
+    echo '<div style="display:flex; align-items:center; gap:0.5em;">';
+    echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
+    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') . ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+    echo '</label>';
+
+    if (is_dir($path)) {
+        $browseRel = trim(str_replace($root, '', $path), '/');
+        $browseUrl = '?sourcepicker=1&browse_sources=' . urlencode($browseRel) .
+                     '&sources=' . urlencode(implode(',', $zipSources)) .
+                     '&dest=' . urlencode($zipDestRel) .
+                     '&name=' . urlencode($archiveName) .
+                     '&format=' . urlencode($format);
+        echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
+    } else {
+        $size = formatBytes(filesize($path));
+        echo '<span class="file-entry">📄 ' . htmlspecialchars($entry) . " ($size)</span>";
+    }
+
+    echo '</div>';
+}
+?>
+</div>
+<?php endif; ?>
+
+<?php if ($isDestPicker): ?>
+<div class="folder-list">
+<?php
+if ($destPath !== $root) {
+    $parent = dirname($destPath);
+    echo '<a href="?destpicker=1&browse_dest=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+         '&sources=' . urlencode(implode(',', $zipSources)) .
+         '&dest=' . urlencode($zipDestRel) .
+         '&name=' . urlencode($archiveName) .
+         '&format=' . urlencode($format) . '">⬆️ Up</a>';
+}
+
+foreach (scandir($destPath) as $entry) {
+    $path = $destPath . '/' . $entry;
+    if ($entry === '.' || $entry === '..') continue;
+    if (!is_dir($path)) continue;
+
+    $real = realpath($path);
+    if (!$real || $real === rtrim($root, '/')) continue;
+    $normalized = preg_replace('#/+#', '/', $real);
+    $isSelected = ($zipDestFull === $normalized);
+
+    $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
+                 '&sources=' . urlencode(implode(',', $zipSources)) .
+                 '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
+                 '&name=' . urlencode($archiveName) .
+                 '&format=' . urlencode($format);
+
+    $browseRel = trim(str_replace($root, '', $path), '/');
+    $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
+                 '&sources=' . urlencode(implode(',', $zipSources)) .
+                 '&dest=' . urlencode($zipDestRel) .
+                 '&name=' . urlencode($archiveName) .
+                 '&format=' . urlencode($format);
+
+    echo '<div style="display:flex; align-items:center; gap:0.5em;">';
+    echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
+    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') . ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+    echo '</label>';
+    echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
+    echo '</div>';
+}
+?>
+</div>
+<?php endif; ?>
+
+<?= $archiveResult ?>
+</body>
+</html>
