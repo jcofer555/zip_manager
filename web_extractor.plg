@@ -11,7 +11,7 @@
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.1.0" icon="toolbox">
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.0.0" icon="toolbox">
 
 <CHANGES>
 ## p7zip for UNRAID with webui
@@ -28,7 +28,7 @@ exit 0
 </FILE>
 
 <!-- plugin package -->
-<FILE Name="&plgPATH;/p7zip-17.05-x86_64-3cf.txz" Min="7.1.0" Run="upgradepkg --install-new">
+<FILE Name="&plgPATH;/p7zip-17.05-x86_64-3cf.txz" Min="7.0.0" Run="upgradepkg --install-new">
 <URL>&pkgURL;/p7zip-17.05-x86_64-3cf.txz</URL>
 </FILE>
 
