@@ -1,47 +1,176 @@
 Menu="Utilities"
 Type="xmenu"
 Title="Web Extractor"
-Icon="icon"
-Tag="icon"
+Icon="icon.png"
+Tag="icon.png"
 Markdown="false"
 ---
 
 <?php
-$plugin = "web_extractor";
-$pluginPath = "/usr/local/emhttp/plugins/$plugin";
-$plgConfigPath = "/boot/config/plugins/$plugin";
+$root = '/mnt/user/';
+$allowedExtensions = ['7z', 'zip', 'rar', 'tar.gz', 'gz'];
+$extractionResult = '';
+$previewResult = '';
 
-$zipFile = $_POST['zipFile'] ?? '';
-$extractTo = $_POST['extractTo'] ?? '';
-$output = "";
+$currentPath = isset($_GET['browse']) ? realpath($root . $_GET['browse']) : $root;
+if (!$currentPath || strpos($currentPath, $root) !== 0 || !is_dir($currentPath)) {
+    $currentPath = $root;
+}
+$relativePath = trim(str_replace($root, '', $currentPath), '/');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $zipFile && $extractTo) {
-    $zipFile = escapeshellarg($zipFile);
-    $extractTo = escapeshellarg($extractTo);
-    exec("/usr/bin/7z x -o$extractTo $zipFile 2>&1", $out);
-    $output = implode("\n", $out);
+$selectedFile = $_GET['file'] ?? '';
+$selectedDestRel = $_GET['dest'] ?? '';
+$selectedDestFull = $selectedDestRel ? $root . ltrim($selectedDestRel, '/') : '';
+
+$isFilePicker = isset($_GET['filepicker']);
+$isFolderPicker = isset($_GET['folderpicker']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $inputDest = $_POST['destination'] ?? '';
+    $inputDest = preg_replace('#/+#','/', $inputDest);
+    $destination = str_starts_with($inputDest, $root)
+        ? $inputDest
+        : $root . ltrim($inputDest, '/');
+
+    $filePath = $_POST['selected_file'] ?? '';
+
+    if (!$filePath || !file_exists($filePath)) {
+        $extractionResult = "<pre>❌ No valid file selected.</pre><hr>";
+    } else {
+        $filename = basename($filePath);
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (preg_match('/\.tar\.gz$/i', $filename)) $ext = 'tar.gz';
+
+        if (!in_array($ext, $allowedExtensions)) {
+            $extractionResult = "<pre>❌ Invalid file type: .$ext</pre><hr>";
+        } elseif (isset($_POST['preview']) && !isset($_POST['extract'])) {
+            exec("/usr/bin/7z l -ba " . escapeshellarg($filePath), $output);
+            $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
+            $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
+        } elseif (isset($_POST['extract'])) {
+            $cmd = "/usr/bin/7z x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
+            exec($cmd, $output, $resultCode);
+            $extractionResult = "<pre>";
+            $extractionResult .= $resultCode === 0
+                ? "✅ Extraction successful to: " . htmlspecialchars($destination) . "\n"
+                : "❌ Extraction failed (code $resultCode)\n";
+            $extractionResult .= htmlspecialchars(implode("\n", $output));
+            $extractionResult .= "</pre><hr>";
+        }
+    }
 }
 ?>
 
-<style>
-    .web-extractor-form { padding: 20px; }
-    .web-extractor-form input[type=text] { width: 100%; padding: 8px; margin: 4px 0; }
-    .web-extractor-form input[type=submit] { padding: 8px 12px; }
-    pre { background-color: #111; color: #0f0; padding: 10px; overflow-x: auto; }
-</style>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>7z Extractor</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    label { display: block; margin-top: 1em; }
+    input[type="submit"].orange-button {
+      margin-top: 1em;
+      background-color: #f39c12;
+      color: #fff;
+      border: 1px solid #e08e0b;
+      padding: 0.5em 1.2em;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    input[type="submit"].orange-button:hover {
+      background-color: #e08e0b;
+    }
+    .folder-list {
+      margin-top: 0.5em;
+      padding-left: 1em;
+      border-left: 2px solid #ccc;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #fff;
+    }
+    .folder-list a {
+      display: block;
+      margin: 0.2em 0;
+      text-decoration: none;
+      color: orange;
+      background: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .folder-list a:hover {
+      background: #ffe5cc;
+    }
+    .preview-box {
+      margin-top: 2em;
+      padding: 1em;
+      background: #fff8f0;
+      border: 1px solid orange;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h2>Extract Archive from /mnt/user</h2>
+  <form action="" method="post">
+    <label>Select archive file:
+      <input type="text" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>" readonly onclick="window.location='?filepicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+    </label>
 
-<div class="web-extractor-form">
-    <h2>Web Extractor (p7zip)</h2>
-    <form method="POST">
-        <label>ZIP File Path:</label><br>
-        <input type="text" name="zipFile" placeholder="/mnt/user/data/myfile.zip" required value="<?=htmlspecialchars($zipFile)?>"><br>
-        <label>Extract To Directory:</label><br>
-        <input type="text" name="extractTo" placeholder="/mnt/user/data" required value="<?=htmlspecialchars($extractTo)?>"><br>
-        <input type="submit" value="Extract ZIP">
-    </form>
+    <label>Destination folder:
+      <input type="text" name="destination" value="<?= $selectedDestRel ? htmlspecialchars($root . ltrim($selectedDestRel, '/')) : '' ?>" readonly onclick="window.location='?folderpicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+    </label>
 
-    <?php if ($output): ?>
-        <h3>Output:</h3>
-        <pre><?=htmlspecialchars($output)?></pre>
+    <?php if ($selectedFile): ?>
+		<input type="submit" name="preview" value="Check Archive">
+		<input type="submit" name="extract" value="Extract">
     <?php endif; ?>
-</div>
+
+    <?php if ($isFilePicker): ?>
+    <div class="folder-list">
+      <?php
+      foreach (scandir($currentPath) as $entry) {
+          $path = $currentPath . '/' . $entry;
+          if ($entry === '.' || $entry === '..') continue;
+
+          if (is_dir($path)) {
+              $sub = trim(str_replace($root, '', $path), '/');
+              echo '<a href="?filepicker=1&browse=' . urlencode($sub) . '&file=' . urlencode($selectedFile) . '&dest=' . urlencode($selectedDestRel) . '">' . htmlspecialchars("📂 $entry") . '</a>';
+          } elseif (preg_match('/\.(7z|zip|rar|tar\.gz|gz)$/i', $entry)) {
+              echo '<a href="?file=' . urlencode($path) . '&dest=' . urlencode($selectedDestRel) . '">' . htmlspecialchars("📄 $entry") . '</a>';
+          }
+      }
+      ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($isFolderPicker): ?>
+    <div class="folder-list">
+      <?php
+      if ($currentPath !== $root) {
+          $parent = dirname($currentPath);
+          echo '<a href="?folderpicker=1&browse=' . urlencode(trim(str_replace($root, '', $parent), '/')) . '&file=' . urlencode($selectedFile) . '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
+      }
+
+      foreach (scandir($currentPath) as $entry) {
+          $path = $currentPath . '/' . $entry;
+          if ($entry === '.' || $entry === '..') continue;
+          if (is_dir($path)) {
+              $rel = trim(str_replace($root, '', $path), '/');
+              echo '<a href="?dest=' . urlencode($rel) . '&file=' . urlencode($selectedFile) . '">' . htmlspecialchars("📂 $entry") . '</a>';
+          }
+      }
+      ?>
+    </div>
+    <?php endif; ?>
+  </form>
+
+  <?= $previewResult ?>
+  <?= $extractionResult ?>
+</body>
+</html>
