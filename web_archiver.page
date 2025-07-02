@@ -23,7 +23,7 @@ function formatBytes($bytes, $precision = 1) {
 function renderBreadcrumb($base, $relPath, $queryKey, $extraParams = []) {
     $segments = $relPath ? explode('/', $relPath) : [];
     $breadcrumb = '<div style="margin: 0.5em 0; font-weight: bold;">📁 ';
-    $breadcrumb .= '<a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => ''], $extraParams)) . '">' . htmlspecialchars(rtrim($base, '/')) . '</a>';
+    $breadcrumb .= '<a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => ''], $extraParams)) . '">' . rtrim($base, '/') . '</a>';
     $path = '';
     foreach ($segments as $i => $segment) {
         $path .= ($i > 0 ? '/' : '') . $segment;
