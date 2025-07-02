@@ -19,10 +19,23 @@ function formatBytes($bytes, $precision = 1) {
     return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
 }
 
+// Breadcrumb renderer
+function renderBreadcrumb($base, $relPath, $queryKey, $extraParams = []) {
+    $segments = $relPath ? explode('/', $relPath) : [];
+    $breadcrumb = '<div style="margin: 0.5em 0; font-weight: bold;">📁 ';
+    $breadcrumb .= '<a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => ''], $extraParams)) . '">' . htmlspecialchars(rtrim($base, '/')) . '</a>';
+    $path = '';
+    foreach ($segments as $i => $segment) {
+        $path .= ($i > 0 ? '/' : '') . $segment;
+        $breadcrumb .= ' / <a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => $path], $extraParams)) . '">' . htmlspecialchars($segment) . '</a>';
+    }
+    $breadcrumb .= '</div>';
+    return $breadcrumb;
+}
+
 $isSourcePicker = isset($_GET['sourcepicker']);
 $isDestPicker = isset($_GET['destpicker']);
 
-// Separate browse states
 $sourcePath = $root;
 $sourceRelPath = '';
 $destPath = $root;
@@ -42,7 +55,6 @@ if ($isDestPicker) {
     $destRelPath = trim(str_replace($root, '', $destPath), '/');
 }
 
-// Form state
 $format = $_SERVER['REQUEST_METHOD'] === 'POST'
     ? ($_POST['zip_format'] ?? 'zip')
     : ($_GET['format'] ?? 'zip');
@@ -55,9 +67,9 @@ $zipDestFull = $zipDestRel ? preg_replace('#/+#', '/', $root . ltrim($zipDestRel
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['clear'])) {
-    echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
-    return;
-}
+        echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
+        return;
+    }
 
     if (isset($_POST['create'])) {
         $sources = $zipSources;
@@ -80,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $archiveResult .= '</form><hr>';
         } else {
             $escapedSources = array_map('escapeshellarg', $sources);
+
             if ($format === 'tar.gz') {
                 $tempTar = '/tmp/archive_temp.tar';
                 $cmd1 = "/usr/bin/7z a -ttar $tempTar " . implode(' ', $escapedSources);
@@ -94,6 +107,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exec($cmd, $zipOutput, $zipCode);
             }
 
+            if ($zipCode <= 1 && file_exists($outputPath)) {
+                exec("chown nobody:users " . escapeshellarg($outputPath));
+                exec("chmod 644 " . escapeshellarg($outputPath));
+            }
+
             $archiveResult .= "<pre>";
             if ($zipCode <= 1) {
                 $archiveResult .= "✅ Archive created at: $outputPath\n";
@@ -105,13 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-$disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName);
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-  <title>7z Archiver</title>
+  <title>Web Archiver</title>
   <style>
     body { font-family: sans-serif; margin: 2em; }
     .form-row {
@@ -197,6 +213,8 @@ $disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName
   <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
   <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
 
+  <?php $disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName); ?>
+
   <div style="margin-top: 1.5em;">
     <input type="submit" name="create" value="📦 Create Archive"
       <?= $disableCreate ? 'disabled style="opacity:0.5; cursor:not-allowed;" title="Please select files and a destination."' : '' ?>>
@@ -205,17 +223,14 @@ $disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName
 </form>
 
 <?php if ($isSourcePicker): ?>
+<?= renderBreadcrumb($root, $sourceRelPath, 'sourcepicker', [
+    'sources' => implode(',', $zipSources),
+    'dest' => $zipDestRel,
+    'name' => $archiveName,
+    'format' => $format
+]) ?>
 <div class="folder-list">
 <?php
-if ($sourcePath !== $root) {
-    $parent = dirname($sourcePath);
-    echo '<a href="?sourcepicker=1&browse_sources=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
-         '&sources=' . urlencode(implode(',', $zipSources)) .
-         '&dest=' . urlencode($zipDestRel) .
-         '&name=' . urlencode($archiveName) .
-         '&format=' . urlencode($format) . '">⬆️ Up</a>';
-}
-
 foreach (scandir($sourcePath) as $entry) {
     $path = $sourcePath . '/' . $entry;
     if ($entry === '.' || $entry === '..') continue;
@@ -262,17 +277,14 @@ foreach (scandir($sourcePath) as $entry) {
 <?php endif; ?>
 
 <?php if ($isDestPicker): ?>
+<?= renderBreadcrumb($root, $destRelPath, 'destpicker', [
+    'sources' => implode(',', $zipSources),
+    'dest' => $zipDestRel,
+    'name' => $archiveName,
+    'format' => $format
+]) ?>
 <div class="folder-list">
 <?php
-if ($destPath !== $root) {
-    $parent = dirname($destPath);
-    echo '<a href="?destpicker=1&browse_dest=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
-         '&sources=' . urlencode(implode(',', $zipSources)) .
-         '&dest=' . urlencode($zipDestRel) .
-         '&name=' . urlencode($archiveName) .
-         '&format=' . urlencode($format) . '">⬆️ Up</a>';
-}
-
 foreach (scandir($destPath) as $entry) {
     $path = $destPath . '/' . $entry;
     if ($entry === '.' || $entry === '..') continue;
@@ -298,7 +310,8 @@ foreach (scandir($destPath) as $entry) {
 
     echo '<div style="display:flex; align-items:center; gap:0.5em;">';
     echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
-    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') . ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
+         ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
     echo '</label>';
     echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
     echo '</div>';
