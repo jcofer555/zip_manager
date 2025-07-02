@@ -1,5 +1,0 @@
-[web_extractor]
-name = Web Extractor
-icon = toolbox
-section = Settings
-web = /Plugins/web_extractor/webUI.php
