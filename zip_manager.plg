@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "zip_manager">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.02f">
+<!ENTITY version   "2025.07.02g">
 <!ENTITY launch    "Settings/&name;">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -16,7 +16,7 @@
 
 <CHANGES>
 ## p7zip for UNRAID
-###2025.07.02f
+###2025.07.02g
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
@@ -43,13 +43,13 @@ A plugin to extract individual zip files and to zip up files into an archive
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O /usr/local/emhttp/plugins/&name;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702f"
+wget -q -O /usr/local/emhttp/plugins/&name;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702g"
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O /usr/local/emhttp/plugins/&name;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702f"
+wget -q -O /usr/local/emhttp/plugins/&name;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/web_archiver.page?v=20250702g"
 </INLINE>
 </FILE>
 
