@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
-  <h2>Extract Archive from /mnt/user</h2>
+  <h2>Extract Archive</h2>
   <form action="" method="post">
     <label>Select archive file:
       <input type="text" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>" readonly onclick="window.location='?filepicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
