@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "web_extractor">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.01b">
+<!ENTITY version   "2025.07.01c">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/packages">
@@ -14,8 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.0.0" icon="toolbox">
 
 <CHANGES>
-## p7zip for UNRAID with webui
-###2025.07.01b
+## p7zip for UNRAID
+###2025.07.01c
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
@@ -34,9 +34,9 @@ exit 0
 
 <FILE Name="&emhttp;/README.md" Mode="0644">
 <INLINE>
-**p7zip for UNRAID with webui**
+**p7zip for UNRAID**
 
-Webui based way to extract your individual zip files
+Extract zip files with an easy to use webui
 </INLINE>
 </FILE>
 
@@ -44,7 +44,7 @@ Webui based way to extract your individual zip files
 <INLINE>
 echo ""
 echo "-------------------------------------------------------------"
-echo " p7zip for UNRAID with webui has been installed."
+echo " p7zip for UNRAID has been installed."
 echo " Version: &version; / Plugin Maintainer: &author;"
 echo "-------------------------------------------------------------"
 echo ""
