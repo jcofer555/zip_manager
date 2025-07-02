@@ -4,7 +4,7 @@
 <!ENTITY name      "web_extractor">
 <!ENTITY author    "jcofer555">
 <!ENTITY version   "2025.07.01b">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/web_extractor/refs/heads/main">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/refs/heads/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/packages">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -16,7 +16,7 @@
 <CHANGES>
 ## p7zip for UNRAID with webui
 ###2025.07.01b
-- release note: welcome to the first version of the web_extractor
+- release note: welcome to the first version of the &name;
 </CHANGES>
 
 <FILE Run="/bin/bash">
