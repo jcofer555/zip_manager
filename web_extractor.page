@@ -4,6 +4,7 @@ Title="Web Extractor"
 Icon="icon"
 Tag="icon"
 Markdown="false"
+---
 
 <?php
 $plugin = "web_extractor";
