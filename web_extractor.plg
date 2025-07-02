@@ -40,6 +40,10 @@ Extract zip files with an easy to use webui
 </INLINE>
 </FILE>
 
+<FILE Name="&emhttp;/webUI.php" Mode="0644">
+<URL>&gitURL;/webUI.php</URL>
+</FILE>
+
 <FILE Run="/bin/bash">
 <INLINE>
 echo ""
