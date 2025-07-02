@@ -1,10 +1,10 @@
 <?xml version='1.0' standalone='yes'?>
 
 <!DOCTYPE PLUGIN [
-<!ENTITY name      "web_extractor">
+<!ENTITY name      "zip_manager">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.02e">
-<!ENTITY launch    "Settings/web_extractor">
+<!ENTITY version   "2025.07.02f">
+<!ENTITY launch    "Settings/&name;">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/packages">
@@ -16,7 +16,7 @@
 
 <CHANGES>
 ## p7zip for UNRAID
-###2025.07.02e
+###2025.07.02f
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
@@ -37,17 +37,31 @@ exit 0
 <INLINE>
 **p7zip for UNRAID**
 
-Extract zip files with an easy to use webui
+A plugin to extract individual zip files and to zip up files into an archive
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O /usr/local/emhttp/plugins/&name;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702e"
+wget -q -O /usr/local/emhttp/plugins/&name;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702f"
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+wget -q -O /usr/local/emhttp/plugins/&name;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702f"
 </INLINE>
 </FILE>
 
 <FILE Name="&emhttp;/icon.png" Mode="0644">
+<URL>&gitURL;/icon.png</URL>
+</FILE>
+
+<FILE Name="&emhttp;/zip.png" Mode="0644">
+<URL>&gitURL;/icon.png</URL>
+</FILE>
+
+<FILE Name="&emhttp;/unzip.png" Mode="0644">
 <URL>&gitURL;/icon.png</URL>
 </FILE>
 
