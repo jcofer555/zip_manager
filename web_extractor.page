@@ -7,7 +7,7 @@ Markdown="false"
 ---
 
 <?php
-$root = '/mnt/user/';
+$root = '/mnt/';
 $allowedExtensions = [
     '7z', 'zip', 'rar', 'tar', 'gz', 'bz2', 'xz', 'lzma', 'z',
     'cab', 'arj', 'iso', 'udf', 'wim', 'dmg', 'vhd', 'vmdk',
@@ -15,33 +15,52 @@ $allowedExtensions = [
     'tar.gz', 'tar.bz2', 'tar.xz', 'tar.zst',
     'lzh', 'lha', 'ace', 'zst', 'img'
 ];
+
 $extractionResult = '';
 $previewResult = '';
+$isFilePicker = isset($_GET['filepicker']);
+$isDestPicker = isset($_GET['destpicker']);
 
-$currentPath = isset($_GET['browse']) ? realpath($root . $_GET['browse']) : $root;
-if (!$currentPath || strpos($currentPath, $root) !== 0 || !is_dir($currentPath)) {
-    $currentPath = $root;
+// Separate navigation states
+$filePath = $root;
+$fileRelPath = '';
+$destPath = $root;
+$destRelPath = '';
+
+if ($isFilePicker) {
+    $browse = $_GET['browse_file'] ?? '';
+    $filePath = realpath($root . $browse) ?: $root;
+    if (strpos($filePath, $root) !== 0 || !is_dir($filePath)) $filePath = $root;
+    $fileRelPath = trim(str_replace($root, '', $filePath), '/');
 }
-$relativePath = trim(str_replace($root, '', $currentPath), '/');
 
-$selectedFile = $_GET['file'] ?? '';
-$selectedDestRel = $_GET['dest'] ?? '';
+if ($isDestPicker) {
+    $browse = $_GET['browse_dest'] ?? '';
+    $destPath = realpath($root . $browse) ?: $root;
+    if (strpos($destPath, $root) !== 0 || !is_dir($destPath)) $destPath = $root;
+    $destRelPath = trim(str_replace($root, '', $destPath), '/');
+}
+
+// Selected values
+$selectedFile = $_GET['file'] ?? $_POST['selected_file'] ?? '';
+$selectedDestRel = $_GET['dest'] ?? $_POST['destination'] ?? '';
 $selectedDestFull = $selectedDestRel ? $root . ltrim($selectedDestRel, '/') : '';
 
-$isFilePicker = isset($_GET['filepicker']);
-$isFolderPicker = isset($_GET['folderpicker']);
+// Clear logic
+if (isset($_POST['clear'])) {
+    echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
+    return;
+}
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $inputDest = $_POST['destination'] ?? '';
-    $inputDest = preg_replace('#/+#','/', $inputDest);
-    $destination = str_starts_with($inputDest, $root)
-        ? $inputDest
-        : $root . ltrim($inputDest, '/');
-
-    $filePath = $_POST['selected_file'] ?? '';
+// Preview or extract
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
+    $filePath = $_POST['selected_file'];
+    $destination = $_POST['destination'] ?? '';
+    $destination = preg_replace('#/+#','/', $destination);
+    $destination = str_starts_with($destination, $root) ? $destination : $root . ltrim($destination, '/');
     $confirmed = isset($_POST['proceed']);
 
-    if (!$filePath || !file_exists($filePath)) {
+    if (!file_exists($filePath)) {
         $extractionResult = "<pre>❌ No valid file selected.</pre><hr>";
     } else {
         $filename = basename($filePath);
@@ -51,23 +70,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($ext, $allowedExtensions)) {
             $extractionResult = "<pre>❌ Invalid file type: .$ext</pre><hr>";
         } elseif (isset($_POST['preview']) && !isset($_POST['extract'])) {
+		if (!$destination || !is_dir($destination)) {
+				$extractionResult = "<pre>❌ Please select a valid destination folder before extracting.</pre><hr>";
+				return;
+		}
             exec("/usr/bin/7z l -ba " . escapeshellarg($filePath), $output);
             $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
             $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
         } elseif (isset($_POST['extract'])) {
-            // Check for overwrite conflicts using 7z l table parsing
             $conflicts = [];
             $files = [];
             $inListing = false;
 
             exec("/usr/bin/7z l " . escapeshellarg($filePath), $listing);
-
             foreach ($listing as $line) {
                 if (preg_match('/^-+$/', $line)) {
                     $inListing = !$inListing;
                     continue;
                 }
-
                 if ($inListing && preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
                     $parts = preg_split('/\s{2,}/', $line);
                     $filename = end($parts);
@@ -100,6 +120,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $cmd = "/usr/bin/7z x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
                 exec($cmd, $output, $resultCode);
+				if ($resultCode === 0) {
+					// Set ownership to nobody:users
+					exec("chown -R nobody:users " . escapeshellarg($destination));
+
+					// Set folder permissions to 755
+					exec("find " . escapeshellarg($destination) . " -type d -exec chmod 755 {} +");
+
+					// Set file permissions to 644
+					exec("find " . escapeshellarg($destination) . " -type f -exec chmod 644 {} +");
+				}
                 $extractionResult = "<pre>";
                 $extractionResult .= $resultCode === 0
                     ? "✅ Extraction successful to: " . htmlspecialchars($destination) . "\n"
@@ -111,16 +141,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
   <title>7z Extractor</title>
   <style>
     body { font-family: sans-serif; margin: 2em; }
-    label { display: block; margin-top: 1em; }
+    .form-row {
+      display: flex;
+      align-items: flex-start;
+      margin-top: 1em;
+    }
+    .form-row label {
+      width: 180px;
+      font-weight: bold;
+      padding-top: 6px;
+    }
+    .form-row input[type="text"] {
+      flex: 1;
+      padding: 6px;
+      cursor: pointer;
+    }
     .folder-list {
-      margin-top: 0.5em;
+      margin-top: 1em;
       padding-left: 1em;
       border-left: 2px solid #ccc;
       max-height: 300px;
@@ -128,16 +171,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: #fff;
     }
     .folder-list a {
-      display: block;
-      margin: 0.2em 0;
       text-decoration: none;
       color: orange;
       background: white;
       padding: 4px 8px;
       border-radius: 4px;
+      display: block;
+      margin: 4px 0;
     }
     .folder-list a:hover {
       background: #ffe5cc;
+    }
+    .file-entry {
+      color: green;
+    }
+    .folder-list input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: orange;
     }
     .preview-box {
       margin-top: 2em;
@@ -148,63 +199,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       white-space: pre-wrap;
       color: #333;
     }
+	.disabled-entry {
+	  color: red;
+	}
   </style>
 </head>
 <body>
-  <h2>Extract archive using 7z</h2>
-  <form action="" method="post">
-    <label>Select archive file:
-      <input type="text" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>" readonly onclick="window.location='?filepicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
-    </label>
 
-    <label>Destination folder:
-      <input type="text" name="destination" value="<?= $selectedDestRel ? htmlspecialchars($root . ltrim($selectedDestRel, '/')) : '' ?>" readonly onclick="window.location='?folderpicker=1&browse=<?= urlencode($relativePath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
-    </label>
+<h2>Extract archive using 7z</h2>
 
-		<input type="submit" name="preview" value="Check Archive" <?= $selectedFile ? '' : 'disabled' ?>>
-		<input type="submit" name="extract" value="Extract" <?= $selectedFile ? '' : 'disabled' ?>>
-		<input type="button" value="Clear" onclick="window.location='?browse=<?= urlencode($relativePath) ?>'">
+<form method="post">
+  <div class="form-row">
+    <label>File to extract:</label>
+    <input type="text" name="selected_file_display" readonly
+           value="<?= htmlspecialchars($selectedFile) ?>"
+           onclick="window.location='?filepicker=1&browse_file=<?= urlencode($fileRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+  </div>
 
-    <?php if ($isFilePicker): ?>
-    <div class="folder-list">
-      <?php
-      foreach (scandir($currentPath) as $entry) {
-          $path = $currentPath . '/' . $entry;
-          if ($entry === '.' || $entry === '..') continue;
+  <div class="form-row">
+    <label>Destination folder:</label>
+    <input type="text" name="destination_display" readonly
+           value="<?= htmlspecialchars($selectedDestFull) ?>"
+           onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+  </div>
 
-          if (is_dir($path)) {
-              $sub = trim(str_replace($root, '', $path), '/');
-              echo '<a href="?filepicker=1&browse=' . urlencode($sub) . '&file=' . urlencode($selectedFile) . '&dest=' . urlencode($selectedDestRel) . '">' . htmlspecialchars("📂 $entry") . '</a>';
-          } elseif (preg_match('/\.(7z|zip|rar|tar\.gz|gz)$/i', $entry)) {
-              echo '<a href="?file=' . urlencode($path) . '&dest=' . urlencode($selectedDestRel) . '">' . htmlspecialchars("📄 $entry") . '</a>';
-          }
-      }
-      ?>
-    </div>
-    <?php endif; ?>
+  <input type="hidden" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>">
+  <input type="hidden" name="destination" value="<?= htmlspecialchars($selectedDestFull) ?>">
 
-    <?php if ($isFolderPicker): ?>
-    <div class="folder-list">
-      <?php
-      if ($currentPath !== $root) {
-          $parent = dirname($currentPath);
-          echo '<a href="?folderpicker=1&browse=' . urlencode(trim(str_replace($root, '', $parent), '/')) . '&file=' . urlencode($selectedFile) . '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
-      }
+  <div style="margin-top: 1.5em;">
+    <input type="submit" name="preview" value="Check Archive" <?= $selectedFile ? '' : 'disabled' ?>>
+    <input type="submit" name="extract" value="Extract" <?= ($selectedFile && $selectedDestFull) ? '' : 'disabled' ?>>
+    <input type="submit" name="clear" value="🧼 Clear">
+  </div>
+</form>
 
-      foreach (scandir($currentPath) as $entry) {
-          $path = $currentPath . '/' . $entry;
-          if ($entry === '.' || $entry === '..') continue;
-          if (is_dir($path)) {
-              $rel = trim(str_replace($root, '', $path), '/');
-              echo '<a href="?dest=' . urlencode($rel) . '&file=' . urlencode($selectedFile) . '">' . htmlspecialchars("📂 $entry") . '</a>';
-          }
-      }
-      ?>
-    </div>
-    <?php endif; ?>
-  </form>
+<?php if ($isFilePicker): ?>
+<div class="folder-list">
+<?php
+if ($filePath !== $root) {
+    $parent = dirname($filePath);
+    echo '<a href="?filepicker=1&browse_file=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+         '&file=' . urlencode($selectedFile) .
+         '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
+}
 
-  <?= $previewResult ?>
-  <?= $extractionResult ?>
+foreach (scandir($filePath) as $entry) {
+    $path = $filePath . '/' . $entry;
+    if ($entry === '.' || $entry === '..') continue;
+
+    $real = realpath($path);
+    if (!$real || $real === rtrim($root, '/')) continue;
+
+    $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+    if (preg_match('/\.tar\.gz$/i', $entry)) $ext = 'tar.gz';
+
+    $isSelectable = is_file($path) && in_array($ext, $allowedExtensions);
+    $isSelected = ($selectedFile === $real);
+
+    $toggleUrl = '?filepicker=1&browse_file=' . urlencode($fileRelPath) .
+                 '&file=' . urlencode($isSelected ? '' : $real) .
+                 '&dest=' . urlencode($selectedDestRel);
+
+    $browseRel = trim(str_replace($root, '', $path), '/');
+    $browseUrl = '?filepicker=1&browse_file=' . urlencode($browseRel) .
+                 '&file=' . urlencode($selectedFile) .
+                 '&dest=' . urlencode($selectedDestRel);
+
+    echo '<div style="display:flex; align-items:center; gap:0.5em;">';
+    echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
+    echo '<input type="checkbox" style="width:16px; height:16px;" ' .
+         ($isSelected ? 'checked ' : '') .
+         ($isSelectable ? 'onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';"' : 'disabled style="visibility:hidden;"') .
+         '>';
+    echo '</label>';
+
+	if (is_dir($path)) {
+		echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
+	} elseif ($isSelectable) {
+		echo '<span class="file-entry">📄 ' . htmlspecialchars($entry) . '</span>';
+	} else {
+		echo '<span class="disabled-entry">📄 ' . htmlspecialchars($entry) . '</span>';
+	}
+
+    echo '</div>';
+}
+?>
+</div>
+<?php endif; ?>
+
+<?php if ($isDestPicker): ?>
+<div class="folder-list">
+<?php
+if ($destPath !== $root) {
+    $parent = dirname($destPath);
+    echo '<a href="?destpicker=1&browse_dest=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+         '&file=' . urlencode($selectedFile) .
+         '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
+}
+
+foreach (scandir($destPath) as $entry) {
+    $path = $destPath . '/' . $entry;
+    if ($entry === '.' || $entry === '..') continue;
+    if (!is_dir($path)) continue;
+
+    $real = realpath($path);
+    if (!$real || $real === rtrim($root, '/')) continue;
+    $normalized = preg_replace('#/+#', '/', $real);
+    $isSelected = ($selectedDestFull === $normalized);
+
+    $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
+                 '&file=' . urlencode($selectedFile) .
+                 '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/'));
+
+    $browseRel = trim(str_replace($root, '', $path), '/');
+    $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
+                 '&file=' . urlencode($selectedFile) .
+                 '&dest=' . urlencode($selectedDestRel);
+
+    echo '<div style="display:flex; align-items:center; gap:0.5em;">';
+    echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
+    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
+         ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+    echo '</label>';
+    echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
+    echo '</div>';
+}
+?>
+</div>
+<?php endif; ?>
+
+<?= $previewResult ?>
+<?= $extractionResult ?>
 </body>
 </html>
