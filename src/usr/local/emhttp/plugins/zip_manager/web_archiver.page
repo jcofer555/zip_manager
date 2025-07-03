@@ -179,7 +179,7 @@ $supportUrl = "https://forums.unraid.net/topic/191678-7-zip-for-unraid/"; // Fix
 ?>
 
 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5em; margin-bottom: 1em;">
-  <h2 style="margin: 0; align-self: flex-start;">Extract archive using 7zzs</h2>
+  <h2 style="margin: 0; align-self: flex-start;">Create archive using 7zzs</h2>
 
   <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
     <input type="submit" value="🔗 Go to Extractor Page" style="margin-top: 0.1em;">
