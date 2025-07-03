@@ -122,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
                 exec($cmd, $output, $resultCode);
 				if ($resultCode === 0) {
 					// Set ownership to nobody:users
-					exec("chown -R nobody:users " . escapeshellarg($destination));
+					exec("chown nobody:users " . escapeshellarg($destination));
 
 					// Set folder permissions to 755
 					exec("find " . escapeshellarg($destination) . " -type d -exec chmod 755 {} +");
