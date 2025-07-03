@@ -17,7 +17,7 @@
 <CHANGES>
 ## 7-zip for UNRAID
 ###2025.07.03b
-- release note: welcome to the first version of &name;
+- release note: welcome to the first version of Zip Manager!
 </CHANGES>
 
 <FILE Run="/bin/bash">
