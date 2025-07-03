@@ -34,6 +34,7 @@ exit 0
 mkdir /tmp/7zzs
 mkdir /usr/local/emhttp/plugins/zip_manager
 wget -q -O /tmp/7zzs/7zzs.tar.xz "https://7-zip.org/a/7z2409-linux-x64.tar.xz"
+cd /tmp/7zzs
 tar -xvf /tmp/7zzs/7zzs.tar.xz
 mv /tmp/7zzs/7zzs /usr/bin/7zzs
 chmod +x /usr/bin/7zzs
