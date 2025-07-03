@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "zip_manager">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.03">
+<!ENTITY version   "2025.07.03a">
 <!ENTITY launch    "Settings/web_extractor">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
 <!ENTITY pluginURL "&gitURL;/plugin/&name;.plg">
@@ -16,8 +16,8 @@
 
 <CHANGES>
 ## 7-zip for UNRAID
-###2025.07.03
-- release note: welcome to the first version of the &name;
+###2025.07.03a
+- release note: welcome to the first version of &name;
 </CHANGES>
 
 <FILE Run="/bin/bash">
@@ -48,13 +48,13 @@ rm -rfd /tmp/7zzs
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_extractor.page?v=20250703"
+wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_extractor.page?v=20250703a"
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_archiver.page?v=20250703"
+wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_archiver.page?v=20250703a"
 </INLINE>
 </FILE>
 
