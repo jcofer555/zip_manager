@@ -206,10 +206,10 @@ $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
 $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-  <h2 style="margin: 0;">Extract archive using 7zzs</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.1em;">
+  <h2 style="margin: 0;">Extract archive using 7-zip</h2>
   <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
-    <input type="submit" value="🔗 Go to Archiver Page" style="margin-top: 1.5em;">
+    <input type="submit" value="🔗 Go to Archiver Page" style="margin-top: 0.1em;">
   </form>
 </div>
 
@@ -237,6 +237,25 @@ $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlenco
     <input type="submit" name="clear" value="🧼 Clear">
   </div>
 </form>
+
+<div style="
+  position: fixed;
+  bottom: 2em;
+  right: -14em;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em;
+  z-index: 1000;
+">
+
+  <form action="<?= htmlspecialchars($supportUrl) ?>" method="get" style="margin: 0;">
+    <input type="submit" value="❓ Support Forum" style="margin: 0;">
+  </form>
+
+</div>
 
 <?php if ($isFilePicker): ?>
 <div class="folder-list">
