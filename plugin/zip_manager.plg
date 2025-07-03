@@ -36,7 +36,6 @@ tar -xvf /tmp/7zzs.tar.xz
 mv /tmp/7zzs/7zzs /usr/bin/7zzs
 chmod +x /usr/bin/7zzs
 rm -rfd /tmp/7zzs
-exit 1
 </INLINE>
 </FILE>
 
