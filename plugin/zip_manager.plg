@@ -52,7 +52,7 @@ wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&autho
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/usr/local/emhttp/plugins/zip_manager/src/web_archiver.page?v=20250703"
+wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_archiver.page?v=20250703"
 </INLINE>
 </FILE>
 
@@ -82,8 +82,6 @@ echo ""
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 killall 7zzs >/dev/null 2>&amp;1
-
-removepkg &plgPATH;/*.txz
 rm -f /usr/bin/7zzs
 rm -rf &emhttp;
 
