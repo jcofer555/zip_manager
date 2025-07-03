@@ -40,34 +40,6 @@ rm -rfd /tmp/7zzs
 </INLINE>
 </FILE>
 
-<FILE Name="&plgPATH;/README.md">
-<URL>&gitURL;/README.md</URL>
-</FILE>
-
-<FILE Run="/bin/bash">
-<INLINE>
-wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_extractor.page?v=20250703"
-</INLINE>
-</FILE>
-
-<FILE Run="/bin/bash">
-<INLINE>
-wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_archiver.page?v=20250703"
-</INLINE>
-</FILE>
-
-<FILE Name="&emhttp;/icon.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/icon.png</URL>
-</FILE>
-
-<FILE Name="&emhttp;/zip.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/zip.png</URL>
-</FILE>
-
-<FILE Name="&emhttp;/unzip.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/unzip.png</URL>
-</FILE>
-
 <FILE Run="/bin/bash">
 <INLINE>
 echo ""
