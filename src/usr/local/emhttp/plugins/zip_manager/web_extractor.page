@@ -251,7 +251,7 @@ $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlenco
   z-index: 1000;
 ">
 
-  <form action="<?= htmlspecialchars($supportUrl) ?>" method="get" style="margin: 0;">
+  <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
     <input type="submit" value="❓ Support Forum" style="margin: 0;">
   </form>
 
