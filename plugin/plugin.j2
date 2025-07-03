@@ -23,7 +23,7 @@ For older releases, see https://github.com/{{ env['GITHUB_REPOSITORY'] }}/releas
 </CHANGES>
 
 <FILE Name="/boot/config/plugins/{{ name }}/{{ zip_file }}">
-<URL>https://github.com/{{ env['GITHUB_REPOSITORY'] }}/raw/refs/tags/{{ github.event.release.tag_name }}/packages/{{ zip_file }}</URL>
+<URL>https://github.com/{{ env['GITHUB_REPOSITORY'] }}/raw/refs/tags/{{ env['PLUGIN_TAG'] }}/packages/{{ zip_file }}</URL>
 <SHA256>{{ zip_checksum }}</SHA256>
 </FILE>
 
