@@ -1,2 +1,2 @@
 # zip_manager
-A plugin to extract individual zip files and to zip up files into an archive
+A plugin to extract package files and zip up files into an archive
