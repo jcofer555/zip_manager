@@ -95,15 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($format === 'tar.gz') {
                 $tempTar = '/tmp/archive_temp.tar';
-                $cmd1 = "/usr/bin/7z a -ttar $tempTar " . implode(' ', $escapedSources);
-                $cmd2 = "/usr/bin/7z a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
+                $cmd1 = "/usr/bin/7zzs a -ttar $tempTar " . implode(' ', $escapedSources);
+                $cmd2 = "/usr/bin/7zzs a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
                 exec($cmd1, $out1, $code1);
                 exec($cmd2, $out2, $code2);
                 unlink($tempTar);
                 $zipOutput = array_merge($out1, $out2);
                 $zipCode = max($code1, $code2);
             } else {
-                $cmd = "/usr/bin/7z a -t$format " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
+                $cmd = "/usr/bin/7zzs a -t$format " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
                 exec($cmd, $zipOutput, $zipCode);
             }
 
@@ -124,10 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Web Archiver</title>
   <style>
     body { font-family: sans-serif; margin: 2em; }
     .form-row {
@@ -175,10 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       accent-color: orange;
     }
   </style>
-</head>
-<body>
 
-<h2>Create archive using 7z</h2>
+<h2>Create archive using 7zzs</h2>
 
 <form method="post">
   <div class="form-row">
@@ -321,5 +315,3 @@ foreach (scandir($destPath) as $entry) {
 <?php endif; ?>
 
 <?= $archiveResult ?>
-</body>
-</html>

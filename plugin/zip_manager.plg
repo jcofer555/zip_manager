@@ -3,10 +3,10 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "zip_manager">
 <!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.02h">
+<!ENTITY version   "2025.07.03">
 <!ENTITY launch    "Settings/web_extractor">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
-<!ENTITY pluginURL "&gitURL;/&name;.plg">
+<!ENTITY pluginURL "&gitURL;/plugin/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/packages">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
@@ -15,61 +15,64 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" icon="icon.png">
 
 <CHANGES>
-## p7zip for UNRAID
-###2025.07.02h
+## 7-zip for UNRAID
+###2025.07.03
 - release note: welcome to the first version of the &name;
 </CHANGES>
 
 <FILE Run="/bin/bash">
 <INLINE>
-killall p7zip >/dev/null 2>&amp;1
+killall 7zzs >/dev/null 2>&amp;1
 rm -f &plgPATH;/README.md
 exit 0
 </INLINE>
 </FILE>
 
 <!-- plugin package -->
-<FILE Name="&plgPATH;/p7zip-17.05-x86_64-3cf.txz" Min="7.0.0" Run="upgradepkg --install-new">
-<URL>&pkgURL;/p7zip-17.05-x86_64-3cf.txz</URL>
+<FILE Run="/bin/bash">
+<INLINE>
+wget -q -O /tmp/7zzs.tar.xz "https://7-zip.org/a/7z2409-linux-x64.tar.xz"
+tar -xvf /tmp/7zzs.tar.xz
+mv /tmp/7zzs/7zzs /usr/bin/7zzs
+chmod +x /usr/bin/7zzs
+rm -rfd /tmp/7zzs
+exit 1
+</INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/README.md" Mode="0644">
-<INLINE>
-**p7zip for UNRAID**
+<FILE Name="&plgPATH;/README.md">
+<URL>&gitURL;/README.md</URL>
+</FILE>
 
-A plugin to extract individual zip files and to zip up files into an archive
+<FILE Run="/bin/bash">
+<INLINE>
+wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_extractor.page?v=20250703"
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O /usr/local/emhttp/plugins/&name;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/web_extractor.page?v=20250702h"
-</INLINE>
-</FILE>
-
-<FILE Run="/bin/bash">
-<INLINE>
-wget -q -O /usr/local/emhttp/plugins/&name;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/web_archiver.page?v=20250702h"
+wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/usr/local/emhttp/plugins/zip_manager/src/web_archiver.page?v=20250703"
 </INLINE>
 </FILE>
 
 <FILE Name="&emhttp;/icon.png" Mode="0644">
-<URL>&gitURL;/icon.png</URL>
+<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/icon.png</URL>
 </FILE>
 
 <FILE Name="&emhttp;/zip.png" Mode="0644">
-<URL>&gitURL;/zip.png</URL>
+<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/zip.png</URL>
 </FILE>
 
 <FILE Name="&emhttp;/unzip.png" Mode="0644">
-<URL>&gitURL;/unzip.png</URL>
+<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/unzip.png</URL>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
 echo ""
 echo "-------------------------------------------------------------"
-echo " p7zip for UNRAID has been installed."
+echo " 7-zip for UNRAID has been installed."
 echo " Version: &version; / Plugin Maintainer: &author;"
 echo "-------------------------------------------------------------"
 echo ""
@@ -78,15 +81,15 @@ echo ""
 
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
-killall p7zip >/dev/null 2>&amp;1
+killall 7zzs >/dev/null 2>&amp;1
 
 removepkg &plgPATH;/*.txz
-rm -rf &plgPATH;
+rm -f /usr/bin/7zzs
 rm -rf &emhttp;
 
 echo ""
 echo "-----------------------------------------------------------"
-echo " p7zip for UNRAID has been removed."
+echo " 7-zip for UNRAID has been removed."
 echo " Version: &version; / Plugin Maintainer: &author;"
 echo "-----------------------------------------------------------"
 echo ""
