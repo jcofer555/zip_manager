@@ -31,7 +31,7 @@ exit 0
 <!-- plugin package -->
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O /tmp/7zzs.tar.xz "https://7-zip.org/a/7z2409-linux-x64.tar.xz"
+wget -q -O /tmp/7zzs/7zzs.tar.xz "https://7-zip.org/a/7z2409-linux-x64.tar.xz"
 tar -xvf /tmp/7zzs/7zzs.tar.xz
 mv /tmp/7zzs/7zzs /usr/bin/7zzs
 chmod +x /usr/bin/7zzs
