@@ -48,26 +48,26 @@ rm -rfd /tmp/7zzs
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O &emhttp;/web_extractor.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_extractor.page?v=20250703b"
+wget -q -O &emhttp;/web_extractor.page "&gitURL;/src/&emhttp;/web_extractor.page?v=20250703b"
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-wget -q -O &emhttp;/web_archiver.page "https://raw.githubusercontent.com/&author;/&name;/main/src/usr/local/emhttp/plugins/zip_manager/web_archiver.page?v=20250703b"
+wget -q -O &emhttp;/web_archiver.page "&gitURL;/src/&emhttp;/web_archiver.page?v=20250703b"
 </INLINE>
 </FILE>
 
 <FILE Name="&emhttp;/icon.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/icon.png</URL>
+<URL>&gitURL;/src/&emhttp;/icon.png</URL>
 </FILE>
 
 <FILE Name="&emhttp;/zip.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/zip.png</URL>
+<URL>&gitURL;/src/&emhttp;/zip.png</URL>
 </FILE>
 
 <FILE Name="&emhttp;/unzip.png" Mode="0644">
-<URL>&gitURL;/src/usr/local/emhttp/plugins/zip_manager/unzip.png</URL>
+<URL>&gitURL;/src/&emhttp;/unzip.png</URL>
 </FILE>
 
 <FILE Run="/bin/bash">
