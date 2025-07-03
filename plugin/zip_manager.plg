@@ -1,98 +1,75 @@
 <?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN>
 
-<!DOCTYPE PLUGIN [
-<!ENTITY name      "zip_manager">
-<!ENTITY author    "jcofer555">
-<!ENTITY version   "2025.07.03b">
-<!ENTITY launch    "Settings/web_extractor">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/&name;/main">
-<!ENTITY pluginURL "&gitURL;/plugin/&name;.plg">
-<!ENTITY pkgURL    "&gitURL;/packages">
-<!ENTITY plgPATH   "/boot/config/plugins/&name;">
-<!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-]>
-
-<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" icon="icon.png">
+<PLUGIN 
+  name="zip_manager"
+  author="jcofer555"
+  version="2025.07.03"
+  launch="Settings/web_extractor"
+  pluginURL="https://raw.githubusercontent.com/jcofer555/zip_manager/main/plugin/zip_manager.plg"
+  support="https://forums.unraid.net/topic/191678-7-zip-for-unraid/"
+  min="7.0.0"
+  
+  icon="folder"
+>
 
 <CHANGES>
-## 7-zip for UNRAID
-###2025.07.03b
-- release note: welcome to the first version of Zip Manager!
+<![CDATA[
+###2025.07.03###
+Initial release
+
+For older releases, see https://github.com/jcofer555/zip_manager/releases
+]]>
 </CHANGES>
 
+<FILE Name="/boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz">
+<URL>https://7-zip.org/a/7z2409-linux-x64.tar.xz</URL>
+<SHA256>914c7e20ad5ef8e4d3cf08620ff8894b28fe11b7eb99809d6930870fbe48a281</SHA256>
+</FILE>
+
+<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.03-noarch-1.txz">
+<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.03/unraid-zip-manager-2025.07.03-noarch-1.txz</URL>
+<SHA256>154f058a153bf0f928bafd8d7f007c14715becc1f29254a5af5b94b3b097492c</SHA256>
+</FILE>
+
+<!--
+The 'install' script.
+-->
 <FILE Run="/bin/bash">
 <INLINE>
-killall 7zzs >/dev/null 2>&amp;1
-rm -f &plgPATH;/README.md
-exit 0
-</INLINE>
-</FILE>
+<![CDATA[
+upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.03-noarch-1.txz
 
-<!-- plugin package -->
-<FILE Run="/bin/bash">
-<INLINE>
-mkdir /tmp/7zzs
-mkdir /usr/local/emhttp/plugins/zip_manager
-wget -q -O /tmp/7zzs/7zzs.tar.xz "&pkgURL;/7z2409-linux-x64.tar.xz"
-cd /tmp/7zzs
-tar -xvf /tmp/7zzs/7zzs.tar.xz>/dev/null 2>&amp;1
-mv /tmp/7zzs/7zzs /usr/bin/7zzs
-chmod +x /usr/bin/7zzs
-rm -rfd /tmp/7zzs
-</INLINE>
-</FILE>
+killall 7zzs >/dev/null 2>&1
+tar xvf /boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz -C /usr/bin/ 7zzs
 
-<FILE Name="&plgPATH;/README.md">
-<URL>&gitURL;/README.md</URL>
-</FILE>
+# cleanup old versions
+rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.07.03')
+rm -f $(ls /boot/config/plugins/zip_manager/*.tar.xz 2>/dev/null | grep -v '7z2409-linux-x64.tar.xz')
 
-<FILE Run="/bin/bash">
-<INLINE>
-wget -q -O &emhttp;/web_extractor.page "&gitURL;/src/&emhttp;/web_extractor.page?v=20250703b"
-</INLINE>
-</FILE>
-
-<FILE Run="/bin/bash">
-<INLINE>
-wget -q -O &emhttp;/web_archiver.page "&gitURL;/src/&emhttp;/web_archiver.page?v=20250703b"
-</INLINE>
-</FILE>
-
-<FILE Name="&emhttp;/icon.png" Mode="0644">
-<URL>&gitURL;/src/&emhttp;/icon.png</URL>
-</FILE>
-
-<FILE Name="&emhttp;/zip.png" Mode="0644">
-<URL>&gitURL;/src/&emhttp;/zip.png</URL>
-</FILE>
-
-<FILE Name="&emhttp;/unzip.png" Mode="0644">
-<URL>&gitURL;/src/&emhttp;/unzip.png</URL>
-</FILE>
-
-<FILE Run="/bin/bash">
-<INLINE>
 echo ""
-echo "-------------------------------------------------------------"
-echo " 7-zip for UNRAID has been installed."
-echo " Version: &version; / Plugin Maintainer: &author;"
-echo "-------------------------------------------------------------"
+echo "----------------------------------------------------"
+echo " zip_manager has been installed."
+echo " Version: 2025.07.03"
+echo "----------------------------------------------------"
 echo ""
+]]>
 </INLINE>
 </FILE>
 
+<!--
+The 'remove' script.
+-->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
-killall 7zzs >/dev/null 2>&amp;1
-rm -f /usr/bin/7zzs
-rm -rf &emhttp;
+<![CDATA[
+removepkg unraid-zip-manager
 
-echo ""
-echo "-----------------------------------------------------------"
-echo " 7-zip for UNRAID has been removed."
-echo " Version: &version; / Plugin Maintainer: &author;"
-echo "-----------------------------------------------------------"
-echo ""
+killall 7zzs >/dev/null 2>&1
+rm -f /usr/bin/7zzs
+rm -rf /usr/local/emhttp/plugins/zip_manager
+rm -rf /boot/config/plugins/zip_manager
+]]>
 </INLINE>
 </FILE>
 
