@@ -215,9 +215,19 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.1em;">
   <h2 style="margin: 0;">Create archive using 7-zip</h2>
-  <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
-    <input type="submit" value="🔗 Go to Extractor Page" style="margin-top: 0.1em;">
-  </form>
+
+  <!-- Button container -->
+  <div style="display: flex; gap: 0.5em; margin-left: 1em;">
+    <!-- First button: Go to Extractor -->
+    <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
+      <input type="submit" value="🔗 Extractor Page" style="margin-top: 0.1em;">
+    </form>
+
+    <!-- Second button: Support Forum -->
+    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
+      <input type="submit" value="❓ Support Forum" style="margin-top: 0.1em;">
+    </form>
+  </div>
 </div>
 
 <div id="processing-message" style="display: none; color: orange; font-weight: bold; margin-top: 1em;">
@@ -326,23 +336,6 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
     <input type="submit" name="clear" value="🧼 Clear">
   </div>
 </form>
-
-<div style="
-  position: fixed;
-  bottom: 2em;
-  right: -15em;
-  width: 100%;
-  max-width: 400px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5em;
-  z-index: 1000;
-">
-  <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
-    <input type="submit" value="❓ Support Forum" style="margin: 0;">
-  </form>
-</div>
 
 <?php if ($isSourcePicker): ?>
 <div id="file-picker-container">
