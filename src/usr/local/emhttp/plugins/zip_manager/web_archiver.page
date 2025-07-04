@@ -339,6 +339,14 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
 
 <?php if ($isSourcePicker): ?>
 <div id="file-picker-container">
+<?= renderBreadcrumb($root, $sourcePath, 'browse_sources', [
+  'sourcepicker' => 1,
+  'sources' => implode(',', $zipSources),
+  'dest' => $zipDestRel,
+  'name' => $archiveName,
+  'format' => $format
+]) ?>
+  <div class="folder-list">
 <?php
 $excludedFolders = ['user0', 'rootshare', 'addons'];
 $entries = array_filter(scandir($sourcePath), fn($e) => $e !== '.' && $e !== '..' && !in_array($e, $excludedFolders));
@@ -349,13 +357,7 @@ usort($entries, function ($a, $b) use ($sourcePath) {
     return $aIsDir ? -1 : 1;
 });
 ?>
-<?= renderBreadcrumb($root, $sourceRelPath, 'sourcepicker', [
-    'sources' => implode(',', $zipSources),
-    'dest' => $zipDestRel,
-    'name' => $archiveName,
-    'format' => $format
-]) ?>
-<div class="folder-list">
+
 <?php
   if ($sourcePath !== $root) {
       $parent = dirname($sourcePath);
@@ -409,6 +411,14 @@ foreach ($entries as $entry) {
 
 <?php if ($isDestPicker): ?>
 <div id="dest-picker-container">
+<?= renderBreadcrumb($root, $destPath, 'browse_dest', [
+  'destpicker' => 1,
+  'sources' => implode(',', $zipSources),
+  'dest' => $zipDestRel,
+  'name' => $archiveName,
+  'format' => $format
+]) ?>
+  <div class="folder-list">
 <?php
 $excludedFolders = ['user0', 'rootshare', 'addons'];
 $entries = array_filter(scandir($destPath), fn($e) =>
@@ -416,13 +426,7 @@ $entries = array_filter(scandir($destPath), fn($e) =>
 );
 usort($entries, fn($a, $b) => strnatcasecmp($a, $b));
 ?>
-<?= renderBreadcrumb($root, $destRelPath, 'destpicker', [
-    'sources' => implode(',', $zipSources),
-    'dest' => $zipDestRel,
-    'name' => $archiveName,
-    'format' => $format
-]) ?>
-<div class="folder-list">
+
 <?php
   if ($destPath !== $root) {
       $parent = dirname($destPath);
