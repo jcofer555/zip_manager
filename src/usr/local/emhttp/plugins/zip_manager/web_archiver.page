@@ -59,7 +59,6 @@ $format = $_SERVER['REQUEST_METHOD'] === 'POST'
     ? ($_POST['zip_format'] ?? 'zip')
     : ($_GET['format'] ?? 'zip');
 
-$archiveName = $_GET['name'] ?? $_POST['zip_name'] ?? 'archive';
 $zipSources = array_filter(array_map('trim', explode(',', $_GET['sources'] ?? $_POST['zip_sources'] ?? '')));
 $zipSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', $p), $zipSources));
 $zipDestRel = $_GET['dest'] ?? '';
@@ -188,32 +187,93 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
 <form method="post">
   <div class="form-row">
     <label>Files to include:</label>
-    <input type="text" name="zip_sources_display" readonly
-           value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
-           onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'">
+<div style="position: relative; display: inline-block;">
+  <input type="text" name="zip_sources_display" readonly
+         value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
+         onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+         style="width: 300px; padding-right: 1em;">
+  <?php if (empty($zipSources)): ?>
+    <span style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+    ">Click to browse</span>
+  <?php endif; ?>
+</div>
   </div>
 
   <div class="form-row">
     <label>Destination folder:</label>
-    <input type="text" name="zip_output_base_display" readonly
-           value="<?= htmlspecialchars($zipDestFull) ?>"
-           onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'">
+<div style="position: relative; display: inline-block;">
+  <input type="text" name="zip_output_base_display" readonly
+         value="<?= htmlspecialchars($zipDestFull) ?>"
+         onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+         style="width: 300px; padding-right: 1em;">
+  <?php if (empty($zipDestFull)): ?>
+    <span style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+    ">Click to browse</span>
+  <?php endif; ?>
+</div>
   </div>
 
-  <div class="form-row">
-    <label>Archive name:</label>
-    <input type="text" name="zip_name" value="<?= htmlspecialchars($archiveName) ?>">
+<div class="form-row">
+  <label>Archive name:</label>
+  <div style="position: relative; display: inline-block;">
+    <input type="text" name="zip_name" id="zip_name"
+           value="<?= htmlspecialchars($archiveName) ?>"
+           style="width: 300px; padding-right: 1em;"
+           oninput="togglePlaceholder(this)">
+    <span id="zip_name_placeholder" style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+      <?= empty($archiveName) ? '' : 'display: none;' ?>
+    ">Set a name</span>
   </div>
+</div>
 
-  <div class="form-row">
-    <label>Archive format:</label>
-    <select name="zip_format">
-      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP (.zip)</option>
-      <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7-Zip (.7z)</option>
-      <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR (.tar)</option>
-      <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ (.tar.gz)</option>
-    </select>
-  </div>
+<script>
+function togglePlaceholder(input) {
+  const placeholder = document.getElementById('zip_name_placeholder');
+  placeholder.style.display = input.value.trim() ? 'none' : 'inline';
+}
+</script>
+
+<div class="form-row" style="align-items: center;">
+  <label>Archive format:</label>
+  <select name="zip_format" style="
+    width: 75px !important;
+    min-width: 0 !important;
+    max-width: 75px !important;
+    padding: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+    display: inline-block;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+  ">
+    <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
+    <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7Z</option>
+    <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR</option>
+    <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ</option>
+  </select>
+</div>
 
   <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
   <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
@@ -230,7 +290,7 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
 <div style="
   position: fixed;
   bottom: 2em;
-  right: -14em;
+  right: -15em;
   width: 100%;
   max-width: 400px;
   display: flex;

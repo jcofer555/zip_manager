@@ -216,16 +216,44 @@ $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlenco
 <form method="post">
   <div class="form-row">
     <label>File to extract:</label>
-    <input type="text" name="selected_file_display" readonly
-           value="<?= htmlspecialchars($selectedFile) ?>"
-           onclick="window.location='?filepicker=1&browse_file=<?= urlencode($fileRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+<div style="position: relative; display: inline-block;">
+  <input type="text" name="selected_file_display" readonly
+         value="<?= htmlspecialchars($selectedFile) ?>"
+         onclick="window.location='?filepicker=1&browse_file=<?= urlencode($fileRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'"
+         style="width: 300px; padding-right: 1em;">
+  <?php if (empty($selectedFile)): ?>
+    <span style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+    ">Click to browse</span>
+  <?php endif; ?>
+</div>
   </div>
 
   <div class="form-row">
     <label>Destination folder:</label>
-    <input type="text" name="destination_display" readonly
-           value="<?= htmlspecialchars($selectedDestFull) ?>"
-           onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'">
+<div style="position: relative; display: inline-block;">
+  <input type="text" name="destination_display" readonly
+         value="<?= htmlspecialchars($selectedDestFull) ?>"
+         onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'"
+         style="width: 300px; padding-right: 1em;">
+  <?php if (empty($selectedDestFull)): ?>
+    <span style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+    ">Click to browse</span>
+  <?php endif; ?>
+</div>
   </div>
 
   <input type="hidden" name="selected_file" value="<?= htmlspecialchars($selectedFile) ?>">
@@ -241,7 +269,7 @@ $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlenco
 <div style="
   position: fixed;
   bottom: 2em;
-  right: -14em;
+  right: -15em;
   width: 100%;
   max-width: 400px;
   display: flex;
