@@ -535,16 +535,13 @@ $archiverUrl = "/Settings/web_archiver" . ($csrfToken ? "?csrf_token=" . urlenco
 <?= $extractionResult ?>
 
 <?php
-if (file_exists($logFile)) {
     // Read the last 5 lines
-    $historyLines = array_slice(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -5);
+    $historyLines = file_exists($logFile) ? array_slice(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -5) : [];
 
     echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Extraction History logged at /tmp/extract_history.log</strong></summary>';
     echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
     echo $historyLines ? htmlspecialchars(implode("\n", $historyLines)) : "No extractions yet";
     echo "</div></details>";
-}
-
 
 if (isset($_POST['clear_history'])) {
     // 🔍 Debug: Check file status before clearing
