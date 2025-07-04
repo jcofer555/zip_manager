@@ -9,6 +9,7 @@ Markdown="false"
 <?php
 $root = '/mnt/';
 $archiveResult = '';
+$archiveName = $_GET['name'] ?? ($_POST['zip_name'] ?? 'archive');
 
 // Helper to format file sizes
 function formatBytes($bytes, $precision = 1) {
@@ -19,18 +20,24 @@ function formatBytes($bytes, $precision = 1) {
     return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
 }
 
-// Breadcrumb renderer
-function renderBreadcrumb($base, $relPath, $queryKey, $extraParams = []) {
-    $segments = $relPath ? explode('/', $relPath) : [];
-    $breadcrumb = '<div style="margin: 0.5em 0; font-weight: bold;">📁 ';
-    $breadcrumb .= '<a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => ''], $extraParams)) . '">' . rtrim($base, '/') . '</a>';
+function renderBreadcrumb($base, $current, $queryKey, $extra = []) {
+    $rel = trim(str_replace($base, '', $current), '/');
+    $parts = $rel === '' ? [] : explode('/', $rel);
+    $breadcrumbs = [];
+
+    // Root label /mnt (clickable)
+    $query = array_merge([$queryKey => ''], $extra);
+    $breadcrumbs[] = '<a href="?' . http_build_query($query) . '">/mnt</a>';
+
     $path = '';
-    foreach ($segments as $i => $segment) {
-        $path .= ($i > 0 ? '/' : '') . $segment;
-        $breadcrumb .= ' / <a href="?' . http_build_query(array_merge([$queryKey => 1, "browse_$queryKey" => $path], $extraParams)) . '">' . htmlspecialchars($segment) . '</a>';
+    foreach ($parts as $part) {
+        $path .= '/' . $part;
+        $query = array_merge([$queryKey => ltrim($path, '/')], $extra);
+        $breadcrumbs[] = '<a href="?' . http_build_query($query) . '">' . htmlspecialchars($part) . '</a>';
     }
-    $breadcrumb .= '</div>';
-    return $breadcrumb;
+
+	return '<div class="current-dir-container"><strong class="current-dir-label">Current Directory:</strong>'
+		. '<span class="breadcrumb">' . implode(' <span class="breadcrumb-sep">-></span> ', $breadcrumbs) . '</span></div>';
 }
 
 $isSourcePicker = isset($_GET['sourcepicker']);
@@ -123,53 +130,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-  <style>
-    body { font-family: sans-serif; margin: 2em; }
-    .form-row {
-      display: flex;
-      align-items: flex-start;
-      margin-top: 1em;
-    }
-    .form-row label {
-      width: 180px;
-      font-weight: bold;
-      padding-top: 6px;
-    }
-    .form-row input[type="text"],
-    .form-row select {
-      flex: 1;
-      padding: 6px;
-      cursor: pointer;
-    }
-    .folder-list {
-      margin-top: 1em;
-      padding-left: 1em;
-      border-left: 2px solid #ccc;
-      max-height: 300px;
-      overflow-y: auto;
-      background: #fff;
-    }
-    .folder-list a {
-      text-decoration: none;
-      color: orange;
-      background: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      display: block;
-      margin: 4px 0;
-    }
-    .folder-list a:hover {
-      background: #ffe5cc;
-    }
-    .file-entry {
-      color: green;
-    }
-    .folder-list input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      accent-color: orange;
-    }
-  </style>
+<style>
+  body { font-family: sans-serif; margin: 2em; }
+  .form-row {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 1em;
+  }
+  .form-row label {
+    width: 180px;
+    font-weight: bold;
+    padding-top: 6px;
+  }
+  .form-row input[type="text"],
+  .form-row select {
+    flex: 1;
+    padding: 6px;
+    cursor: pointer;
+  }
+  .folder-list {
+    margin-top: 1em;
+    padding-left: 1em;
+    border-left: 2px solid #ccc;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+  }
+  .folder-list a {
+    text-decoration: none;
+    color: orange;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    margin: 4px 0;
+  }
+  .folder-list a:hover {
+    background: #ffe5cc;
+  }
+  .file-entry {
+    color: green;
+  }
+  .folder-list input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: orange;
+  }
+.current-dir-container {
+  margin-bottom: 0.5em;
+  font-size: 1em;
+  color: #444;
+}
+.current-dir-container strong {
+  margin-right: 0.5em;
+}
+.breadcrumb {
+  color: #333;
+  white-space: nowrap;
+}
+.breadcrumb a {
+  color: orange;
+  text-decoration: none;
+  display: inline;
+}
+.breadcrumb a:hover {
+  color: red;
+  text-decoration: underline;
+}
+.current-dir-label {
+  color: orange;
+  margin-right: 0.5em;
+}
+
+.breadcrumb-sep {
+  color: orange;
+}
+</style>
 
 <?php
 // Dynamically generate the Archiver page URL with CSRF token
@@ -184,96 +220,100 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
   </form>
 </div>
 
+<div id="processing-message" style="display: none; color: orange; font-weight: bold; margin-top: 1em;">
+  ⏳ Processing, please wait...
+</div>
+
 <form method="post">
   <div class="form-row">
     <label>Files to include:</label>
-<div style="position: relative; display: inline-block;">
-  <input type="text" name="zip_sources_display" readonly
-         value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
-         onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
-         style="width: 300px; padding-right: 1em;">
-  <?php if (empty($zipSources)): ?>
-    <span style="
-      position: absolute;
-      left: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #aaa;
-      pointer-events: none;
-      font-style: italic;
-    ">Click to browse</span>
-  <?php endif; ?>
-</div>
+    <div style="position: relative; display: inline-block;">
+      <input type="text" name="zip_sources_display" readonly
+             value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
+             onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+             style="width: 300px; padding-right: 1em;">
+      <?php if (empty($zipSources)): ?>
+        <span style="
+          position: absolute;
+          left: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #aaa;
+          pointer-events: none;
+          font-style: italic;
+        ">Click to browse</span>
+      <?php endif; ?>
+    </div>
   </div>
 
   <div class="form-row">
     <label>Destination folder:</label>
-<div style="position: relative; display: inline-block;">
-  <input type="text" name="zip_output_base_display" readonly
-         value="<?= htmlspecialchars($zipDestFull) ?>"
-         onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
-         style="width: 300px; padding-right: 1em;">
-  <?php if (empty($zipDestFull)): ?>
-    <span style="
-      position: absolute;
-      left: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #aaa;
-      pointer-events: none;
-      font-style: italic;
-    ">Click to browse</span>
-  <?php endif; ?>
-</div>
+    <div style="position: relative; display: inline-block;">
+      <input type="text" name="zip_output_base_display" readonly
+             value="<?= htmlspecialchars($zipDestFull) ?>"
+             onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+             style="width: 300px; padding-right: 1em;">
+      <?php if (empty($zipDestFull)): ?>
+        <span style="
+          position: absolute;
+          left: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #aaa;
+          pointer-events: none;
+          font-style: italic;
+        ">Click to browse</span>
+      <?php endif; ?>
+    </div>
   </div>
 
-<div class="form-row">
-  <label>Archive name:</label>
-  <div style="position: relative; display: inline-block;">
-    <input type="text" name="zip_name" id="zip_name"
-           value="<?= htmlspecialchars($archiveName) ?>"
-           style="width: 300px; padding-right: 1em;"
-           oninput="togglePlaceholder(this)">
-    <span id="zip_name_placeholder" style="
-      position: absolute;
-      left: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #aaa;
-      pointer-events: none;
-      font-style: italic;
-      <?= empty($archiveName) ? '' : 'display: none;' ?>
-    ">Set a name</span>
+  <div class="form-row">
+    <label>Archive name:</label>
+    <div style="position: relative; display: inline-block;">
+      <input type="text" name="zip_name" id="zip_name"
+             value="<?= htmlspecialchars($archiveName) ?>"
+             style="width: 300px; padding-right: 1em;"
+             oninput="togglePlaceholder(this)">
+      <span id="zip_name_placeholder" style="
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #aaa;
+        pointer-events: none;
+        font-style: italic;
+        <?= empty($archiveName) ? '' : 'display: none;' ?>
+      ">Set a name</span>
+    </div>
   </div>
-</div>
 
-<script>
-function togglePlaceholder(input) {
-  const placeholder = document.getElementById('zip_name_placeholder');
-  placeholder.style.display = input.value.trim() ? 'none' : 'inline';
-}
-</script>
+  <script>
+  function togglePlaceholder(input) {
+    const placeholder = document.getElementById('zip_name_placeholder');
+    placeholder.style.display = input.value.trim() ? 'none' : 'inline';
+  }
+  </script>
 
-<div class="form-row" style="align-items: center;">
-  <label>Archive format:</label>
-  <select name="zip_format" style="
-    width: 75px !important;
-    min-width: 0 !important;
-    max-width: 75px !important;
-    padding: 6px;
-    font-size: 13px;
-    box-sizing: border-box;
-    display: inline-block;
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-  ">
-    <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
-    <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7Z</option>
-    <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR</option>
-    <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ</option>
-  </select>
-</div>
+  <div class="form-row" style="align-items: center;">
+    <label>Archive format:</label>
+    <select name="zip_format" style="
+      width: 75px !important;
+      min-width: 0 !important;
+      max-width: 75px !important;
+      padding: 6px;
+      font-size: 13px;
+      box-sizing: border-box;
+      display: inline-block;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    ">
+      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
+      <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7Z</option>
+      <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR</option>
+      <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ</option>
+    </select>
+  </div>
 
   <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
   <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
@@ -299,14 +339,23 @@ function togglePlaceholder(input) {
   padding: 0.5em;
   z-index: 1000;
 ">
-
   <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
     <input type="submit" value="❓ Support Forum" style="margin: 0;">
   </form>
-
 </div>
 
 <?php if ($isSourcePicker): ?>
+<div id="file-picker-container">
+<?php
+$excludedFolders = ['user0', 'rootshare', 'addons'];
+$entries = array_filter(scandir($sourcePath), fn($e) => $e !== '.' && $e !== '..' && !in_array($e, $excludedFolders));
+usort($entries, function ($a, $b) use ($sourcePath) {
+    $aIsDir = is_dir("$sourcePath/$a");
+    $bIsDir = is_dir("$sourcePath/$b");
+    if ($aIsDir === $bIsDir) return strnatcasecmp($a, $b);
+    return $aIsDir ? -1 : 1;
+});
+?>
 <?= renderBreadcrumb($root, $sourceRelPath, 'sourcepicker', [
     'sources' => implode(',', $zipSources),
     'dest' => $zipDestRel,
@@ -315,10 +364,14 @@ function togglePlaceholder(input) {
 ]) ?>
 <div class="folder-list">
 <?php
-foreach (scandir($sourcePath) as $entry) {
+  if ($sourcePath !== $root) {
+      $parent = dirname($sourcePath);
+      echo '<a href="?sourcepicker=1&browse_sources=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+           '&file=' . urlencode($selectedFile) .
+           '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
+  }
+foreach ($entries as $entry) {
     $path = $sourcePath . '/' . $entry;
-    if ($entry === '.' || $entry === '..') continue;
-
     $real = realpath($path);
     if (!$real || $real === rtrim($root, '/')) continue;
     $normalized = preg_replace('#/+#', '/', $real);
@@ -358,9 +411,18 @@ foreach (scandir($sourcePath) as $entry) {
 }
 ?>
 </div>
+</div>
 <?php endif; ?>
 
 <?php if ($isDestPicker): ?>
+<div id="dest-picker-container">
+<?php
+$excludedFolders = ['user0', 'rootshare', 'addons'];
+$entries = array_filter(scandir($destPath), fn($e) =>
+    $e !== '.' && $e !== '..' && !in_array($e, $excludedFolders) && is_dir("$destPath/$e")
+);
+usort($entries, fn($a, $b) => strnatcasecmp($a, $b));
+?>
 <?= renderBreadcrumb($root, $destRelPath, 'destpicker', [
     'sources' => implode(',', $zipSources),
     'dest' => $zipDestRel,
@@ -369,11 +431,14 @@ foreach (scandir($sourcePath) as $entry) {
 ]) ?>
 <div class="folder-list">
 <?php
-foreach (scandir($destPath) as $entry) {
+  if ($destPath !== $root) {
+      $parent = dirname($destPath);
+      echo '<a href="?destpicker=1&browse_dest=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
+           '&file=' . urlencode($selectedFile) .
+           '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
+  }
+foreach ($entries as $entry) {
     $path = $destPath . '/' . $entry;
-    if ($entry === '.' || $entry === '..') continue;
-    if (!is_dir($path)) continue;
-
     $real = realpath($path);
     if (!$real || $real === rtrim($root, '/')) continue;
     $normalized = preg_replace('#/+#', '/', $real);
@@ -402,6 +467,55 @@ foreach (scandir($destPath) as $entry) {
 }
 ?>
 </div>
+</div>
 <?php endif; ?>
 
 <?= $archiveResult ?>
+
+<script>
+document.addEventListener('click', function(event) {
+  const filePicker = document.getElementById('file-picker-container');
+  const destPicker = document.getElementById('dest-picker-container');
+
+  // Helper to check if click was inside a container or input
+  function clickInside(element) {
+    return element && (element.contains(event.target) || event.target === element);
+  }
+
+  // For file picker
+  if (filePicker) {
+    const inputFile = document.querySelector('input[name="selected_file_display"]');
+    if (!clickInside(filePicker) && event.target !== inputFile) {
+      // Hide picker container
+      filePicker.style.display = 'none';
+
+      // Remove ?filepicker=1 from URL without reloading
+      const url = new URL(window.location);
+      url.searchParams.delete('filepicker');
+      url.searchParams.delete('browse_file');
+      // Optionally keep file & dest params if you want
+      history.replaceState(null, '', url.toString());
+    }
+  }
+
+  // For destination picker
+  if (destPicker) {
+    const inputDest = document.querySelector('input[name="destination_display"]');
+    if (!clickInside(destPicker) && event.target !== inputDest) {
+      // Hide picker container
+      destPicker.style.display = 'none';
+
+      // Remove ?destpicker=1 from URL without reloading
+      const url = new URL(window.location);
+      url.searchParams.delete('destpicker');
+      url.searchParams.delete('browse_dest');
+      history.replaceState(null, '', url.toString());
+    }
+  }
+});
+// Show "processing" message when form is submitted
+document.querySelector('form[method="post"]').addEventListener('submit', function() {
+  const msg = document.getElementById('processing-message');
+  if (msg) msg.style.display = 'block';
+});
+</script>
