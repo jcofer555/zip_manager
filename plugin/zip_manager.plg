@@ -4,33 +4,34 @@
 <PLUGIN 
   name="zip_manager"
   author="jcofer555"
-  version="2025.07.05.1"
+  version="2025.07.05.2"
   launch="Settings/web_extractor"
   pluginURL="https://raw.githubusercontent.com/jcofer555/zip_manager/main/plugin/zip_manager.plg"
   support="https://forums.unraid.net/topic/191678-7-zip-for-unraid/"
   min="7.0.0"
   
-  icon="folder"
+  icon="file-zipper"
 >
 
 <CHANGES>
 <![CDATA[
-###2025.07.05.1###
-Fixed applying permissions for extractor\
-Updated icons
+###2025.07.05.2###
+###2025.07.05.2###
+- Updated logging output
+- Changed icon
 
 For older releases, see https://github.com/jcofer555/zip_manager/releases
 ]]>
 </CHANGES>
 
 <FILE Name="/boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz">
-<URL>https://github.com/jcofer555/zip_manager/raw/refs/tags/2025.07.05.1/packages/7z2409-linux-x64.tar.xz</URL>
+<URL>https://github.com/jcofer555/zip_manager/raw/refs/tags/2025.07.05.2/packages/7z2409-linux-x64.tar.xz</URL>
 <SHA256>914c7e20ad5ef8e4d3cf08620ff8894b28fe11b7eb99809d6930870fbe48a281</SHA256>
 </FILE>
 
-<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.05.1-noarch-1.txz">
-<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.05.1/unraid-zip-manager-2025.07.05.1-noarch-1.txz</URL>
-<SHA256>d7c32f24832a517cc577482bef6f9f2d86ef89ed96b8ad94a40101e87bc97fd2</SHA256>
+<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.05.2-noarch-1.txz">
+<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.05.2/unraid-zip-manager-2025.07.05.2-noarch-1.txz</URL>
+<SHA256>2b026aa2eb47f7e0163b365ff85e31b97aaa0131dc1ef39d842d60eb59636a12</SHA256>
 </FILE>
 
 <!--
@@ -39,19 +40,19 @@ The 'install' script.
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
-upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.05.1-noarch-1.txz
+upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.05.2-noarch-1.txz
 
 killall 7zzs >/dev/null 2>&1
 tar xvf /boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz -C /usr/bin/ 7zzs
 
 # cleanup old versions
-rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.07.05.1')
+rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.07.05.2')
 rm -f $(ls /boot/config/plugins/zip_manager/*.tar.xz 2>/dev/null | grep -v '7z2409-linux-x64.tar.xz')
 
 echo ""
 echo "----------------------------------------------------"
 echo " zip_manager has been installed."
-echo " Version: 2025.07.05.1"
+echo " Version: 2025.07.05.2"
 echo "----------------------------------------------------"
 echo ""
 ]]>
