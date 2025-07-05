@@ -7,6 +7,8 @@ Markdown="false"
 ---
 
 <?php
+while (ob_get_level()) ob_end_clean(); // Clear any existing buffers
+ob_implicit_flush(true); // Enable auto-flushing
 $logFile = '/boot/config/plugins/zip_manager/extract_history.log';
 $root = '/mnt/';
 $allowedExtensions = [
@@ -179,9 +181,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
                     $extractionResult .= '<input type="hidden" name="proceed" value="1">';
                     $extractionResult .= '<input type="submit" value="✅ Overwrite">';
                     $extractionResult .= '</form><hr>';
-                } else {
-$cmd = "/usr/bin/7zzs x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y > /dev/null 2>&1";
-exec($cmd, $output, $resultCode);
+} else {
+    // ✅ Show processing message before extraction
+echo '<div id="processing-message" style="color: orange; font-weight: bold;">⏳ Extracting archive, please wait...</div>';
+echo str_repeat(' ', 1024); // Force buffer flush
+flush();
+if (function_exists('ob_flush')) ob_flush();
+
+    $cmd = "/usr/bin/7zzs x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y > /dev/null 2>&1";
+    exec($cmd, $output, $resultCode);
 
                     if ($resultCode === 0) {
                         // Set ownership to nobody:users
@@ -204,6 +212,10 @@ $selectedDestRel = '';
     logExtraction($filePath, $destination, "❌ Failed (code $resultCode)");
     $extractionResult = "<p style='color: red; font-size: 1.2em;'>❌ Extraction failed (code $resultCode)</p>";
 }
+echo "<script>
+  const msg = document.getElementById('processing-message');
+  if (msg) msg.remove();
+</script>";
                 }
             }
         }
@@ -595,7 +607,9 @@ if (isset($_POST['clear_history'])) {
         @chown($logFile, 'nobody');
         @chgrp($logFile, 'users');
         chmod($logFile, 0644);
-        echo "<script>window.location.href = '" . strtok($_SERVER["REQUEST_URI"], '?') . "';</script>";
+        $redirectUrl = strtok($_SERVER["REQUEST_URI"], '?');
+$redirectUrl .= '?file=' . urlencode($selectedFile) . '&dest=' . urlencode($selectedDestRel);
+echo "<script>window.location.href = '$redirectUrl';</script>";
     } else {
         echo "<pre>❌ Failed to open log file for clearing: $logFile</pre>";
     }

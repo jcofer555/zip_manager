@@ -297,7 +297,7 @@ $archiverUrl = "/Tools/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode
   <div style="display: flex; gap: 0.5em; margin-left: 1em;">
     <!-- First button: Go to Extractor -->
     <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
-      <input type="submit" value="📤 Extractor Page" style="margin-top: 0.1em;">
+      <input type="submit" value="📤 Extraction Page" style="margin-top: 0.1em;">
     </form>
 
     <!-- Second button: Support Forum -->
@@ -602,7 +602,14 @@ if (isset($_POST['clear_history'])) {
         @chown($archiveLogFile, 'nobody');
         @chgrp($archiveLogFile, 'users');
         chmod($archiveLogFile, 0644);
-        echo "<script>window.location.href = '" . strtok($_SERVER["REQUEST_URI"], '?') . "';</script>";
+        $redirectUrl = strtok($_SERVER["REQUEST_URI"], '?');
+$redirectUrl .= '?' . http_build_query([
+    'sources' => implode(',', $zipSources),
+    'dest'    => $zipDestRel,
+    'name'    => $archiveName,
+    'format'  => $format
+]);
+echo "<script>window.location.href = '$redirectUrl';</script>";
     } else {
         echo "<pre>❌ Failed to open log file for clearing: $archiveLogFile</pre>";
     }
