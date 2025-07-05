@@ -2,7 +2,7 @@
     "name": "zip_manager",
     "package_name": "unraid-zip-manager",
     "author": "jcofer555",
-    "icon": "folder",
+    "icon": "file-zipper",
     "support": "https://forums.unraid.net/topic/191678-7-zip-for-unraid/",
     "min": "7.0.0",
     "launch": "Settings/web_extractor",
