@@ -191,16 +191,34 @@ if (function_exists('ob_flush')) ob_flush();
     $cmd = "/usr/bin/7zzs x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y > /dev/null 2>&1";
     exec($cmd, $output, $resultCode);
 
-                    if ($resultCode === 0) {
-                        // Set ownership to nobody:users
-                        exec("chown nobody:users " . escapeshellarg($destination));
+if ($resultCode === 0) {
+    // Get list of extracted files from archive
+    $extractedPaths = [];
+    exec("/usr/bin/7zzs l -ba " . escapeshellarg($filePath), $listOutput);
 
-                        // Set folder permissions to 755
-                        exec("find " . escapeshellarg($destination) . " -type d -exec chmod 755 {} +");
+    foreach ($listOutput as $line) {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
+            $parts = preg_split('/\s{2,}/', $line);
+            $relative = end($parts);
+            if ($relative && substr($relative, -1) !== '/') {
+                $extractedPaths[] = rtrim($destination, '/') . '/' . $relative;
+            }
+        }
+    }
 
-                        // Set file permissions to 644
-                        exec("find " . escapeshellarg($destination) . " -type f -exec chmod 644 {} +");
-                    }
+    // Apply ownership and permissions
+    foreach ($extractedPaths as $path) {
+        if (!file_exists($path)) continue;
+        $escaped = escapeshellarg($path);
+        if (is_dir($path)) {
+            exec("chown nobody:users $escaped");
+            exec("chmod 755 $escaped");
+        } elseif (is_file($path)) {
+            exec("chown nobody:users $escaped");
+            exec("chmod 644 $escaped");
+        }
+    }
+}
                     if ($resultCode === 0) {
     logExtraction($filePath, $destination, '✅ Success');
     $extractionResult = "<p style='color: green; font-size: 1.2em;'>✅ Extraction Successful</p>";
