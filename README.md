@@ -9,7 +9,7 @@ Easily compress and extract a wide variety of archive formats directly from the 
 📦 Extract archives with support for dozens of formats
 📁 Archive folders and files into .7z, .zip, .tar, and .tar.gz formats
 🔒 Automatically sets correct file ownership and permissions after extraction
-📜 Clean and simple interface under the "Utilities" tab
+📜 Clean and simple interface under the "Tools" tab
 
 Perfect for managing archive files directly on your Unraid server.
 
