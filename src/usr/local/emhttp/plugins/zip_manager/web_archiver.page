@@ -1,4 +1,4 @@
-Menu="Utilities"
+Menu="DiskUtilities"
 Type="xmenu"
 Title="Web Archiver"
 Icon="zip.png"
@@ -7,6 +7,8 @@ Markdown="false"
 ---
 
 <?php
+$archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
+define('MAX_ARCHIVE_SIZE', 500 * 1024 * 1024); // 500 MB
 $root = '/mnt/';
 $archiveResult = '';
 $archiveName = $_GET['name'] ?? ($_POST['zip_name'] ?? 'archive');
@@ -18,6 +20,20 @@ function formatBytes($bytes, $precision = 1) {
     $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
     $pow = min($pow, count($units) - 1);
     return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
+}
+
+function logArchiveAction($sources, $destination, $name, $format, $status) {
+    global $archiveLogFile;
+	$archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $user = posix_getpwuid(posix_geteuid())['name'] ?? 'unknown';
+    $entry = "[$timestamp] [$user] $status: " . implode(', ', $sources) . " → $destination/$name.$format\n";
+    file_put_contents($archiveLogFile, $entry, FILE_APPEND | LOCK_EX);
+
+    // Keep only last 5 entries
+    $lines = file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $lastFive = array_slice($lines, -5);
+    file_put_contents($archiveLogFile, implode("\n", $lastFive) . "\n", LOCK_EX);
 }
 
 function renderBreadcrumb($base, $current, $queryKey, $extra = []) {
@@ -71,6 +87,28 @@ $zipSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', $p), $z
 $zipDestRel = $_GET['dest'] ?? '';
 $zipDestFull = $zipDestRel ? preg_replace('#/+#', '/', $root . ltrim($zipDestRel, '/')) : '';
 
+function getDirectorySize($path) {
+    $size = 0;
+    if (is_file($path)) return filesize($path);
+    if (!is_dir($path)) return 0;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
+    );
+
+    foreach ($iterator as $file) {
+        if ($file->isFile()) $size += $file->getSize();
+    }
+
+    return $size;
+}
+
+$totalSelectedSize = 0;
+foreach ($zipSources as $src) {
+    $realSrc = realpath($src);
+    if ($realSrc) $totalSelectedSize += getDirectorySize($realSrc);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['clear'])) {
         echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
@@ -78,6 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['create'])) {
+if ($totalSelectedSize > MAX_ARCHIVE_SIZE) {
+    $archiveResult = "<style='color:red; font-weight:bold;'>❌ Total selected size (" . formatBytes($totalSelectedSize) . ") exceeds the limit of " . formatBytes(MAX_ARCHIVE_SIZE) . "<hr>";
+} else {
+
         $sources = $zipSources;
         $dest = trim($_POST['zip_output_base'] ?? '');
         $name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $_POST['zip_name'] ?? 'archive');
@@ -109,25 +151,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $zipOutput = array_merge($out1, $out2);
                 $zipCode = max($code1, $code2);
             } else {
-                $cmd = "/usr/bin/7zzs a -t$format " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
-                exec($cmd, $zipOutput, $zipCode);
+$cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources) . " > /dev/null 2>&1";
+exec($cmd, $zipOutput, $zipCode);
             }
 
             if ($zipCode <= 1 && file_exists($outputPath)) {
                 exec("chown nobody:users " . escapeshellarg($outputPath));
                 exec("chmod 644 " . escapeshellarg($outputPath));
             }
-
-            $archiveResult .= "<pre>";
-            if ($zipCode <= 1) {
-                $archiveResult .= "✅ Archive created at: $outputPath\n";
-            } else {
-                $archiveResult .= "❌ Archive creation failed (code $zipCode)\n";
-            }
-            $archiveResult .= htmlspecialchars(implode("\n", $zipOutput));
-            $archiveResult .= "</pre><hr>";
+			
+			$status = ($zipCode <= 1 && file_exists($outputPath)) ? '✅ Success' : "❌ Failed (code $zipCode)";
+logArchiveAction($sources, $dest, $name, $format, $status);
+if ($zipCode <= 1 && file_exists($outputPath)) {
+    $archiveResult .= "<p style='color: green; font-weight: bold; font-size: 1.2em;'>✅ Archive Created</p>";
+} else {
+    $archiveResult .= "<p style='color: red; font-weight: bold; font-size: 1.2em;'>❌ Archive creation failed (code $zipCode)</p>";
+}		
         }
     }
+}
 }
 ?>
 <style>
@@ -210,7 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php
 // Dynamically generate the Archiver page URL with CSRF token
 $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
-$archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
+$archiverUrl = "/Tools/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.1em;">
@@ -220,7 +262,7 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
   <div style="display: flex; gap: 0.5em; margin-left: 1em;">
     <!-- First button: Go to Extractor -->
     <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
-      <input type="submit" value="🔗 Extractor Page" style="margin-top: 0.1em;">
+      <input type="submit" value="📤 Extractor Page" style="margin-top: 0.1em;">
     </form>
 
     <!-- Second button: Support Forum -->
@@ -236,7 +278,7 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
 
 <form method="post">
   <div class="form-row">
-    <label>Files to include:</label>
+    <label>Files to archive:</label>
     <div style="position: relative; display: inline-block;">
       <input type="text" name="zip_sources_display" readonly
              value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
@@ -251,7 +293,7 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
           color: #aaa;
           pointer-events: none;
           font-style: italic;
-        ">Click to browse</span>
+        ">Click to browse - Can select multiple</span>
       <?php endif; ?>
     </div>
   </div>
@@ -328,15 +370,26 @@ $archiverUrl = "/Settings/web_extractor" . ($csrfToken ? "?csrf_token=" . urlenc
   <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
   <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
 
-  <?php $disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName); ?>
+  <?php
+$disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName) || $totalSelectedSize > MAX_ARCHIVE_SIZE;
+?>
 
   <div style="margin-top: 1.5em;">
-    <input type="submit" name="create" value="📦 Create Archive"
+    <input type="submit" name="create" value="🗃️ Create Archive"
       <?= $disableCreate ? 'disabled style="opacity:0.5; cursor:not-allowed;" title="Please select files and a destination."' : '' ?>>
-    <input type="submit" name="clear" value="🧼 Clear">
+    <input type="submit" name="clear" value="♻️ Reset Form">
   </div>
 </form>
 
+<?php if ($totalSelectedSize > 0): ?>
+  <div class="form-row" style="align-items: center;">
+    <label style="margin-bottom: 0;">Total size:</label>
+    <div style="padding-top: 6px; font-weight: bold; color: <?= $totalSelectedSize > MAX_ARCHIVE_SIZE ? 'red' : 'green' ?>;">
+      <?= formatBytes($totalSelectedSize) ?> / <?= formatBytes(MAX_ARCHIVE_SIZE) ?> limit
+    </div>
+  </div>
+<?php endif; ?>
+<br>
 <?php if ($isSourcePicker): ?>
 <div id="file-picker-container">
 <?= renderBreadcrumb($root, $sourcePath, 'browse_sources', [
@@ -359,18 +412,26 @@ usort($entries, function ($a, $b) use ($sourcePath) {
 ?>
 
 <?php
-  if ($sourcePath !== $root) {
-      $parent = dirname($sourcePath);
-      echo '<a href="?sourcepicker=1&browse_sources=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
-           '&file=' . urlencode($selectedFile) .
-           '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
-  }
+if ($sourcePath !== $root) {
+    $parent = dirname($sourcePath);
+    $parentRel = trim(str_replace($root, '', $parent), '/');
+    $upUrl = '?sourcepicker=1'
+        . '&browse_sources=' . urlencode($parentRel)
+        . '&sources=' . urlencode(implode(',', $zipSources))
+        . '&dest=' . urlencode($zipDestRel)
+        . '&name=' . urlencode($archiveName)
+        . '&format=' . urlencode($format);
+    echo '<a href="' . $upUrl . '">⬆️ Up</a>';
+}
 foreach ($entries as $entry) {
     $path = $sourcePath . '/' . $entry;
     $real = realpath($path);
     if (!$real || $real === rtrim($root, '/')) continue;
     $normalized = preg_replace('#/+#', '/', $real);
-    $isSelected = in_array($normalized, $zipSources);
+$relativePath = trim(str_replace($root, '', $normalized), '/');
+$depth = substr_count($relativePath, '/');
+$isTopLevel = ($depth === 0);
+$isSelected = in_array($normalized, $zipSources);
 
     $newSources = $isSelected
         ? array_filter($zipSources, fn($s) => $s !== $normalized)
@@ -386,7 +447,9 @@ foreach ($entries as $entry) {
 
     echo '<div style="display:flex; align-items:center; gap:0.5em;">';
     echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
-    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') . ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
+     ($isTopLevel ? ' disabled title="Top-level folders like /mnt/' . htmlspecialchars($entry) . ' cannot be selected."' : '') .
+     ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
     echo '</label>';
 
     if (is_dir($path)) {
@@ -428,18 +491,26 @@ usort($entries, fn($a, $b) => strnatcasecmp($a, $b));
 ?>
 
 <?php
-  if ($destPath !== $root) {
-      $parent = dirname($destPath);
-      echo '<a href="?destpicker=1&browse_dest=' . urlencode(trim(str_replace($root, '', $parent), '/')) .
-           '&file=' . urlencode($selectedFile) .
-           '&dest=' . urlencode($selectedDestRel) . '">⬆️ Up</a>';
-  }
+if ($destPath !== $root) {
+    $parent = dirname($destPath);
+    $parentRel = trim(str_replace($root, '', $parent), '/');
+    $upUrl = '?destpicker=1'
+        . '&browse_dest=' . urlencode($parentRel)
+        . '&sources=' . urlencode(implode(',', $zipSources))
+        . '&dest=' . urlencode($zipDestRel)
+        . '&name=' . urlencode($archiveName)
+        . '&format=' . urlencode($format);
+    echo '<a href="' . $upUrl . '">⬆️ Up</a>';
+}
 foreach ($entries as $entry) {
     $path = $destPath . '/' . $entry;
     $real = realpath($path);
     if (!$real || $real === rtrim($root, '/')) continue;
     $normalized = preg_replace('#/+#', '/', $real);
-    $isSelected = ($zipDestFull === $normalized);
+$relativePath = trim(str_replace($root, '', $normalized), '/');
+$depth = substr_count($relativePath, '/');
+$isTopLevel = ($depth === 0);
+$isSelected = ($zipDestFull === $normalized);
 
     $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
                  '&sources=' . urlencode(implode(',', $zipSources)) .
@@ -456,8 +527,9 @@ foreach ($entries as $entry) {
 
     echo '<div style="display:flex; align-items:center; gap:0.5em;">';
     echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
-    echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
-         ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
+echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
+     ($isTopLevel ? ' disabled title="Top-level folders like /mnt/' . htmlspecialchars($entry) . ' cannot be selected as a destination."' : '') .
+     ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
     echo '</label>';
     echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
     echo '</div>';
@@ -469,50 +541,92 @@ foreach ($entries as $entry) {
 
 <?= $archiveResult ?>
 
+<?php
+    // Read the last 5 lines
+    $historyLines = file_exists($archiveLogFile) ? array_slice(file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -5) : [];
+
+    echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Archiving History logged at /boot/config/plugins/zip_manager/archive_history.log</strong></summary>';
+    echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
+    echo $historyLines ? htmlspecialchars(implode("\n", $historyLines)) : "No archives created yet";
+    echo "</div></details>";
+
+if (isset($_POST['clear_history'])) {
+    // 🔍 Debug: Check file status before clearing
+    if (!file_exists($archiveLogFile)) {
+        echo "<pre>⚠️ Log file does not exist: $archiveLogFile</pre>";
+    } elseif (!is_writable($archiveLogFile)) {
+        echo "<pre>⚠️ Log file is not writable: $archiveLogFile</pre>";
+    } else {
+        echo "<pre>✅ Log file exists and is writable</pre>";
+    }
+
+    // 🧼 Attempt to clear the file
+    $fp = @fopen($archiveLogFile, 'w');
+    if ($fp) {
+        fclose($fp); // Truncate the file
+        @chown($archiveLogFile, 'nobody');
+        @chgrp($archiveLogFile, 'users');
+        chmod($archiveLogFile, 0644);
+        echo "<script>window.location.href = '" . strtok($_SERVER["REQUEST_URI"], '?') . "';</script>";
+    } else {
+        echo "<pre>❌ Failed to open log file for clearing: $archiveLogFile</pre>";
+    }
+    return;
+}
+?>
+
+<form method="post" style="margin-top: 0.5em;">
+  <input type="submit" name="clear_history" value="📜 Clear History"
+         onclick="return confirm('Are you sure you want to clear the archiving history?');">
+</form>
+
 <script>
+// Hide pickers when clicking outside
 document.addEventListener('click', function(event) {
   const filePicker = document.getElementById('file-picker-container');
   const destPicker = document.getElementById('dest-picker-container');
 
-  // Helper to check if click was inside a container or input
   function clickInside(element) {
     return element && (element.contains(event.target) || event.target === element);
   }
 
-  // For file picker
-  if (filePicker) {
-    const inputFile = document.querySelector('input[name="selected_file_display"]');
-    if (!clickInside(filePicker) && event.target !== inputFile) {
-      // Hide picker container
-      filePicker.style.display = 'none';
-
-      // Remove ?filepicker=1 from URL without reloading
-      const url = new URL(window.location);
-      url.searchParams.delete('filepicker');
-      url.searchParams.delete('browse_file');
-      // Optionally keep file & dest params if you want
-      history.replaceState(null, '', url.toString());
-    }
+  if (filePicker && !clickInside(filePicker)) {
+    filePicker.style.display = 'none';
+    const url = new URL(window.location);
+    url.searchParams.delete('sourcepicker');
+    url.searchParams.delete('browse_sources');
+    history.replaceState(null, '', url.toString());
   }
 
-  // For destination picker
-  if (destPicker) {
-    const inputDest = document.querySelector('input[name="destination_display"]');
-    if (!clickInside(destPicker) && event.target !== inputDest) {
-      // Hide picker container
-      destPicker.style.display = 'none';
-
-      // Remove ?destpicker=1 from URL without reloading
-      const url = new URL(window.location);
-      url.searchParams.delete('destpicker');
-      url.searchParams.delete('browse_dest');
-      history.replaceState(null, '', url.toString());
-    }
+  if (destPicker && !clickInside(destPicker)) {
+    destPicker.style.display = 'none';
+    const url = new URL(window.location);
+    url.searchParams.delete('destpicker');
+    url.searchParams.delete('browse_dest');
+    history.replaceState(null, '', url.toString());
   }
 });
-// Show "processing" message when form is submitted
-document.querySelector('form[method="post"]').addEventListener('submit', function() {
-  const msg = document.getElementById('processing-message');
-  if (msg) msg.style.display = 'block';
+
+// Show "processing" message on archive form submit
+document.querySelectorAll('form[method="post"]').forEach(form => {
+  form.addEventListener('submit', function () {
+    const msg = document.getElementById('processing-message');
+    if (msg) msg.style.display = 'block';
+  });
+});
+
+// Clear form fields after successful archive
+document.addEventListener('DOMContentLoaded', function () {
+  const successMsg = document.querySelector('p');
+  if (successMsg && successMsg.textContent.includes('✅ Archive Created')) {
+    const form = document.querySelector('form[method="post"]');
+    if (form) form.reset();
+
+    // Clear display fields manually
+    const sourceDisplay = document.querySelector('input[name="zip_sources_display"]');
+    const destDisplay = document.querySelector('input[name="zip_output_base_display"]');
+    if (sourceDisplay) sourceDisplay.value = '';
+    if (destDisplay) destDisplay.value = '';
+  }
 });
 </script>
