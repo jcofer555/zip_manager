@@ -1,4 +1,4 @@
-# Zip Manager
+# Zip Manager for unRAID
 🔧 Archiver & Extractor Plugin for Unraid
 
 Easily compress and extract a wide variety of archive formats directly from the Unraid WebUI. This plugin integrates 7-Zip with a simple user interface, allowing users to create or unpack archives all without leaving the browser.
@@ -9,11 +9,10 @@ Easily compress and extract a wide variety of archive formats directly from the 
 📦 Extract archives with support for dozens of formats
 📁 Archive folders and files into .7z, .zip, .tar, and .tar.gz formats
 🔒 Automatically sets correct file ownership and permissions after extraction
-📜 Clean and simple interface under the "Utilities" tab
+📜 Clean and simple interface under the "Tools" tab
 
 Perfect for managing archive files directly on your Unraid server.
 
-![image thumb png 2529fcb54c0c020f9cc9536c28c49884](https://github.com/user-attachments/assets/041a75cd-1823-454c-805c-ca40e4dce37a)
+![image thumb png c11c43e93530ba47e14289eb2f4da78b](https://github.com/user-attachments/assets/e529cdc1-b936-4671-bb12-ca7b77264159)
 
-![image thumb png 8941235025919aff4f3a27b29e79e501](https://github.com/user-attachments/assets/72192b25-e786-4dd8-8688-ab48d86e2bd0)
-
+![image thumb png 730f53968e34022266d6465db9f4e8ed](https://github.com/user-attachments/assets/7b3d4872-24fd-4e5b-98c5-ed9621176844)
