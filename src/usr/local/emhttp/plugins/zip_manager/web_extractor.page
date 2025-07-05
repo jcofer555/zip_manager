@@ -49,7 +49,7 @@ function logExtraction($filePath, $destination, $status) {
     $logFile = '/boot/config/plugins/zip_manager/extract_history.log';
     $timestamp = date('Y-m-d H:i:s');
     
-    $entry = "[$timestamp] $status: " . basename($filePath) . " → $destination\n";
+    $entry = "[$timestamp] $status: $filePath → $destination\n";
 
     // Create file if it doesn't exist
     if (!file_exists($logFile)) {

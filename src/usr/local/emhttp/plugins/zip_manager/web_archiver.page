@@ -44,7 +44,7 @@ function logArchiveAction($sources, $destination, $name, $format, $status) {
 	$archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
     $timestamp = date('Y-m-d H:i:s');
     $user = posix_getpwuid(posix_geteuid())['name'] ?? 'unknown';
-    $entry = "[$timestamp] [$user] $status: " . implode(', ', $sources) . " → $destination/$name.$format\n";
+    $entry = "[$timestamp] $status: " . implode(', ', $sources) . " → $destination/$name.$format\n";
     file_put_contents($archiveLogFile, $entry, FILE_APPEND | LOCK_EX);
 
     // Keep only last 5 entries
