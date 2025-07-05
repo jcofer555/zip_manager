@@ -196,6 +196,10 @@ exec($cmd, $output, $resultCode);
                     if ($resultCode === 0) {
     logExtraction($filePath, $destination, '✅ Success');
     $extractionResult = "<p style='color: green; font-size: 1.2em;'>✅ Extraction Successful</p>";
+	$selectedFile = '';
+$selectedDestFull = '';
+$selectedDestRel = '';
+
 } else {
     logExtraction($filePath, $destination, "❌ Failed (code $resultCode)");
     $extractionResult = "<p style='color: red; font-size: 1.2em;'>❌ Extraction failed (code $resultCode)</p>";

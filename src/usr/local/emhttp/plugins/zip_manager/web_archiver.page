@@ -22,6 +22,23 @@ function formatBytes($bytes, $precision = 1) {
     return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
 }
 
+function getBestTempLocation($base = '/mnt') {
+    $bestPath = '/tmp'; // fallback
+    $maxFree = 0;
+
+    foreach (glob("$base/*") as $mount) {
+        if (is_dir($mount) && is_writable($mount)) {
+            $free = @disk_free_space($mount);
+            if ($free !== false && $free > $maxFree) {
+                $maxFree = $free;
+                $bestPath = $mount;
+            }
+        }
+    }
+
+    return $bestPath;
+}
+
 function logArchiveAction($sources, $destination, $name, $format, $status) {
     global $archiveLogFile;
 	$archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
@@ -142,14 +159,25 @@ if ($totalSelectedSize > MAX_ARCHIVE_SIZE) {
             $escapedSources = array_map('escapeshellarg', $sources);
 
             if ($format === 'tar.gz') {
-                $tempTar = '/tmp/archive_temp.tar';
-                $cmd1 = "/usr/bin/7zzs a -ttar $tempTar " . implode(' ', $escapedSources);
-                $cmd2 = "/usr/bin/7zzs a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
-                exec($cmd1, $out1, $code1);
-                exec($cmd2, $out2, $code2);
-                unlink($tempTar);
-                $zipOutput = array_merge($out1, $out2);
-                $zipCode = max($code1, $code2);
+$tempDir = getBestTempLocation();
+$tempTar = $tempDir . '/archive_temp.tar';
+
+$cmd1 = "/usr/bin/7zzs a -ttar $tempTar " . implode(' ', $escapedSources);
+$cmd2 = "/usr/bin/7zzs a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
+
+exec($cmd1, $out1, $code1);
+exec($cmd2, $out2, $code2);
+
+if (file_exists($tempTar)) {
+    unlink($tempTar);
+}
+
+$zipOutput = array_merge($out1, $out2);
+$zipCode = max($code1, $code2);
+
+if ($zipCode > 1 && file_exists($outputPath)) {
+    unlink($outputPath); // clean up failed archive
+}
             } else {
 $cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources) . " > /dev/null 2>&1";
 exec($cmd, $zipOutput, $zipCode);
@@ -164,6 +192,13 @@ exec($cmd, $zipOutput, $zipCode);
 logArchiveAction($sources, $dest, $name, $format, $status);
 if ($zipCode <= 1 && file_exists($outputPath)) {
     $archiveResult .= "<p style='color: green; font-weight: bold; font-size: 1.2em;'>✅ Archive Created</p>";
+
+    // 🧼 Clear selected sources, size, and destination
+    $zipSources = [];
+    $totalSelectedSize = 0;
+    $zipDestFull = '';
+    $zipDestRel = '';
+
 } else {
     $archiveResult .= "<p style='color: red; font-weight: bold; font-size: 1.2em;'>❌ Archive creation failed (code $zipCode)</p>";
 }		
@@ -282,7 +317,7 @@ $archiverUrl = "/Tools/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode
     <div style="position: relative; display: inline-block;">
       <input type="text" name="zip_sources_display" readonly
              value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
-             onclick="window.location='?sourcepicker=1&browse_sources=<?= urlencode($sourceRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+             onclick="openSourcePicker(event)"
              style="width: 300px; padding-right: 1em;">
       <?php if (empty($zipSources)): ?>
         <span style="
@@ -303,7 +338,7 @@ $archiverUrl = "/Tools/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode
     <div style="position: relative; display: inline-block;">
       <input type="text" name="zip_output_base_display" readonly
              value="<?= htmlspecialchars($zipDestFull) ?>"
-             onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&sources=<?= urlencode(implode(',', $zipSources)) ?>&dest=<?= urlencode($zipDestRel) ?>&name=<?= urlencode($archiveName) ?>&format=<?= urlencode($format) ?>'"
+             onclick="openDestPicker(event)"
              style="width: 300px; padding-right: 1em;">
       <?php if (empty($zipDestFull)): ?>
         <span style="
@@ -348,7 +383,7 @@ $archiverUrl = "/Tools/web_extractor" . ($csrfToken ? "?csrf_token=" . urlencode
 
   <div class="form-row" style="align-items: center;">
     <label>Archive format:</label>
-    <select name="zip_format" style="
+    <select name="zip_format" id="zip_format" style="
       width: 75px !important;
       min-width: 0 !important;
       max-width: 75px !important;
@@ -629,4 +664,45 @@ document.addEventListener('DOMContentLoaded', function () {
     if (destDisplay) destDisplay.value = '';
   }
 });
+</script>
+<script>
+function openSourcePicker(event) {
+  if (event) event.stopPropagation();
+
+  const format = document.getElementById('zip_format').value;
+  const url = new URL(window.location.href);
+
+  // Clear any existing destpicker param
+  url.searchParams.delete('destpicker');
+  url.searchParams.delete('browse_dest');
+
+  url.searchParams.set('sourcepicker', '1');
+  url.searchParams.set('browse_sources', '<?= $sourceRelPath ?>');
+  url.searchParams.set('sources', '<?= implode(',', $zipSources) ?>');
+  url.searchParams.set('dest', '<?= $zipDestRel ?>');
+  url.searchParams.set('name', '<?= $archiveName ?>');
+  url.searchParams.set('format', format);
+
+  window.location.href = url.toString();
+}
+
+function openDestPicker(event) {
+  if (event) event.stopPropagation();
+
+  const format = document.getElementById('zip_format').value;
+  const url = new URL(window.location.href);
+
+  // Clear any existing sourcepicker param
+  url.searchParams.delete('sourcepicker');
+  url.searchParams.delete('browse_sources');
+
+  url.searchParams.set('destpicker', '1');
+  url.searchParams.set('browse_dest', '<?= $destRelPath ?>');
+  url.searchParams.set('sources', '<?= implode(',', $zipSources) ?>');
+  url.searchParams.set('dest', '<?= $zipDestRel ?>');
+  url.searchParams.set('name', '<?= $archiveName ?>');
+  url.searchParams.set('format', format);
+
+  window.location.href = url.toString();
+}
 </script>
