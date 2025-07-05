@@ -1,6 +1,6 @@
 Menu="DiskUtilities"
 Type="xmenu"
-Title="Web Extractor"
+Title="Extractor"
 Icon="unzip.png"
 Tag="unzip.png"
 Markdown="false"
@@ -331,7 +331,7 @@ echo "<script>
 <?php
 // Dynamically generate the Archiver page URL with CSRF token
 $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
-$archiverUrl = "/Tools/web_archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
+$archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.1em;">
