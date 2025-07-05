@@ -297,7 +297,7 @@ $archiverUrl = "/Tools/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($cs
   <div style="display: flex; gap: 0.5em; margin-left: 1em;">
     <!-- First button: Go to Extractor -->
     <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
-      <input type="submit" value="📤 Extraction Page" style="margin-top: 0.1em;">
+      <input type="submit" value="📤 Extractor Page" style="margin-top: 0.1em;">
     </form>
 
     <!-- Second button: Support Forum -->
