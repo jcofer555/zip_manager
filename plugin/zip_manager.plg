@@ -17,6 +17,7 @@
 <![CDATA[
 ###2025.07.06###
 - Changed filenames
+- Code alignment fixes
 
 ###2025.07.05.4###
 - Changed names on tools page
@@ -39,7 +40,7 @@ For older releases, see https://github.com/jcofer555/zip_manager/releases
 
 <FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.06-noarch-1.txz">
 <URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.06/unraid-zip-manager-2025.07.06-noarch-1.txz</URL>
-<SHA256>70d423c532333316d52a86bd18840ed1dd5f9a3eb7e3275f23e28a618f01c6b7</SHA256>
+<SHA256>b665263df523bebb8f836ef4ecffe8f75e83736fd097cdc6bcfd2ef207800c88</SHA256>
 </FILE>
 
 <!--
