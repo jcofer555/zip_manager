@@ -7,6 +7,7 @@ Markdown="false"
 ---
 
 <?php
+$logFile = '/boot/config/plugins/zip_manager/last_archived_output.log';
 $archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
 define('MAX_ARCHIVE_SIZE', 500 * 1024 * 1024); // 500 MB
 $root = '/mnt/';
@@ -178,6 +179,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
           exec($cmd1, $out1, $code1);
           exec($cmd2, $out2, $code2);
+		  
+		  file_put_contents("/boot/config/plugins/zip_manager/last_archived_output.log", "TAR output:\n" . implode("\n", $out1) . "\n\nGZIP output:\n" . implode("\n", $out2));
 
           if (file_exists($tempTar)) {
             unlink($tempTar);
@@ -190,8 +193,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unlink($outputPath); // clean up failed archive
           }
         } else {
-          $cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources) . " > /dev/null 2>&1";
+          $cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
           exec($cmd, $zipOutput, $zipCode);
+		  file_put_contents(
+			"/boot/config/plugins/zip_manager/last_archived_output.log",
+			"Command: $cmd\nExit Code: $zipCode\n\n" . implode("\n", $zipOutput)
+			);
         }
 
         if ($zipCode <= 1 && file_exists($outputPath)) {
@@ -318,21 +325,126 @@ $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
 $archiverUrl = "/Tools/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.1em;">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.1em;">
   <h2 style="margin: 0;">Create archive using 7-zip</h2>
 
   <!-- Button container -->
-  <div style="display: flex; gap: 0.5em; margin-left: 1em;">
-    <!-- First button: Go to Extractor -->
+  <div style="display: flex; flex-direction: row; gap: 0.5em; align-items: flex-start; margin-left: 1em;">
+    <!-- Extractor Page -->
     <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
       <input type="submit" value="📤 Extractor Page" style="margin-top: 0.1em;">
     </form>
 
-    <!-- Second button: Support Forum -->
-    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank"
-      style="margin: 0;">
+    <!-- Support Forum -->
+    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
       <input type="submit" value="❓ Support Forum" style="margin-top: 0.1em;">
     </form>
+
+    <!-- Generate Diagnostics ZIP -->
+    <form method="post" style="margin: 0;">
+      <input type="submit" name="generate_diagnostics" value="🛠️ Generate Diagnostics" style="margin-top: 0.1em;">
+    </form>
+  </div>
+</div>
+
+<div style="display: flex;">
+  <div style="margin-left: auto; width: 240px;">
+<?php
+if (isset($_POST['generate_diagnostics'])) {
+  $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
+  $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
+  $debugLog = '/tmp/zip_manager_diagnostic_zip_debug.log';
+
+  // Cleanup previous
+  @exec("rm -rf " . escapeshellarg($diagFolder));
+  @unlink($diagZip);
+  @unlink($debugLog);
+
+  mkdir($diagFolder, 0755, true);
+
+  // Files to redact + copy
+  $logFiles = [
+    'archive_history.log',
+    'extract_history.log',
+    'last_archived_output.log',
+    'last_extracted_output.log',
+    'last_check_archive_output.log',
+  ];
+
+  foreach ($logFiles as $filename) {
+    $src = "/boot/config/plugins/zip_manager/$filename";
+    $dest = "$diagFolder/$filename";
+
+    if (!file_exists($src)) continue;
+
+    $content = file_get_contents($src);
+
+    // 🔒 Redact full paths
+    preg_match_all('#(/\S+)#', $content, $matches);
+    $uniquePaths = array_unique($matches[1]);
+    usort($uniquePaths, fn($a, $b) => strlen($b) - strlen($a)); // longest first
+
+    foreach ($uniquePaths as $i => $path) {
+      $redacted = "[REDACTED_PATH_" . ($i + 1) . "]";
+      $content = str_replace($path, $redacted, $content);
+    }
+
+    // 🔒 Redact filenames in last_check_archive_output.log
+    if ($filename === 'last_check_archive_output.log') {
+      $lines = explode("\n", $content);
+      $redactedLines = array_map(function ($line) {
+        // Match: date time flags size size filename
+        if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+.+?\s+\d+\s+\d+\s+)(.+)$/', $line, $matches)) {
+          return $matches[1] . '[REDACTED_FILENAME]';
+        }
+        return $line;
+      }, $lines);
+      $content = implode("\n", $redactedLines);
+    }
+
+    file_put_contents($dest, $content);
+  }
+
+  // Redacted system info (remove hostname)
+  $hostname = php_uname('n');
+  $plgFile = '/boot/config/plugins/zip_manager.plg';
+
+  if (file_exists($plgFile)) {
+    $raw = file_get_contents($plgFile);
+    libxml_use_internal_errors(true);
+    $xml = simplexml_load_string($raw);
+    if ($xml === false) {
+      echo "Failed to parse XML.";
+      foreach (libxml_get_errors() as $error) {
+        echo "<br>", htmlspecialchars($error->message);
+      }
+    } else {
+      $version = (string) $xml['version'] ?? 'unknown';
+    }
+  }
+
+  $sysInfo = "Generated: " . date('Y-m-d H:i:s') . "\n";
+  $sysInfo .= str_replace($hostname, '[REDACTED_HOST]', php_uname()) . "\n";
+  $sysInfo .= "PHP Version: " . phpversion() . "\n";
+  $sysInfo .= "Plugin Version: " . $version . "\n";
+
+  file_put_contents("$diagFolder/system_info.log", $sysInfo);
+
+  // Create ZIP
+  $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($diagZip) . " " . escapeshellarg($diagFolder) . " 2>&1";
+  exec($cmd, $zipOutput, $exitCode);
+  file_put_contents($debugLog, implode("\n", $zipOutput));
+
+  // Delete diagnostics folder after zip created
+  exec("rm -rf " . escapeshellarg($diagFolder));
+
+  if (file_exists($diagZip)) {
+    echo "<p style='color:green;'>✅ Diagnostics created: <a href='/boot/config/plugins/zip_manager/" . basename($diagZip) . "' download>Download ZIP</a></p>";
+  } else {
+    echo "<p style='color:red;'>❌ Failed to create diagnostics zip (code $exitCode)</p>";
+  }
+}
+?>
   </div>
 </div>
 
