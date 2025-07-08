@@ -7,8 +7,13 @@ Markdown="false"
 ---
 
 <?php
-$logFile = '/boot/config/plugins/zip_manager/last_archived_output.log';
-$archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
+$logDir = '/boot/config/plugins/zip_manager/logs';
+
+if (!is_dir($logDir)) {
+    mkdir($logDir, 0755, true);
+}
+$logFile = '/boot/config/plugins/zip_manager/logs/last_archived_output.log';
+$archiveLogFile = '/boot/config/plugins/zip_manager/logs/archive_history.log';
 define('MAX_ARCHIVE_SIZE', 500 * 1024 * 1024); // 500 MB
 $root = '/mnt/';
 $archiveResult = '';
@@ -45,7 +50,7 @@ function getBestTempLocation($base = '/mnt')
 function logArchiveAction($sources, $destination, $name, $format, $status)
 {
   global $archiveLogFile;
-  $archiveLogFile = '/boot/config/plugins/zip_manager/archive_history.log';
+  $archiveLogFile = '/boot/config/plugins/zip_manager/logs/archive_history.log';
   $timestamp = date('Y-m-d H:i:s');
   $user = posix_getpwuid(posix_geteuid())['name'] ?? 'unknown';
   $entry = "[$timestamp] $status: " . implode(', ', $sources) . " → $destination/$name.$format\n";
@@ -53,7 +58,7 @@ function logArchiveAction($sources, $destination, $name, $format, $status)
 
   // Keep only last 5 entries
   $lines = file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-  $lastFive = array_slice($lines, -5);
+  $lastFive = array_slice($lines, -10);
   file_put_contents($archiveLogFile, implode("\n", $lastFive) . "\n", LOCK_EX);
 }
 
@@ -180,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           exec($cmd1, $out1, $code1);
           exec($cmd2, $out2, $code2);
 		  
-		  file_put_contents("/boot/config/plugins/zip_manager/last_archived_output.log", "TAR output:\n" . implode("\n", $out1) . "\n\nGZIP output:\n" . implode("\n", $out2));
+		  file_put_contents("/boot/config/plugins/zip_manager/logs/last_archived_output.log", "TAR output:\n" . implode("\n", $out1) . "\n\nGZIP output:\n" . implode("\n", $out2));
 
           if (file_exists($tempTar)) {
             unlink($tempTar);
@@ -196,15 +201,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
           exec($cmd, $zipOutput, $zipCode);
 		  file_put_contents(
-			"/boot/config/plugins/zip_manager/last_archived_output.log",
+			"/boot/config/plugins/zip_manager/logs/last_archived_output.log",
 			"Command: $cmd\nExit Code: $zipCode\n\n" . implode("\n", $zipOutput)
 			);
         }
 
-        if ($zipCode <= 1 && file_exists($outputPath)) {
-          exec("chown nobody:users " . escapeshellarg($outputPath));
-          exec("chmod 644 " . escapeshellarg($outputPath));
-        }
+if ($zipCode <= 1 && file_exists($outputPath)) {
+    $logFile = '/boot/config/plugins/zip_manager/logs/last_archived_owner_permission_change_output.log';
+    $timestamp = date('[Y-m-d H:i:s]');
+
+    // Run commands with verbose output
+    $chownOutput = shell_exec("chown -v nobody:users " . escapeshellarg($outputPath) . " 2>&1");
+    $chmodOutput = shell_exec("chmod -v 644 " . escapeshellarg($outputPath) . " 2>&1");
+
+    // Format and write to log
+    $logEntry = <<<LOG
+$timestamp Executing file permission changes:
+Command: chown -v nobody:users {$outputPath}
+Output:
+$chownOutput
+
+Command: chmod -v 644 {$outputPath}
+Output:
+$chmodOutput
+
+LOG;
+
+    file_put_contents($logFile, $logEntry);
+}
 
         $status = ($zipCode <= 1 && file_exists($outputPath)) ? '✅ Success' : "❌ Failed (code $zipCode)";
         logArchiveAction($sources, $dest, $name, $format, $status);
@@ -353,7 +377,7 @@ $archiverUrl = "/Tools/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($cs
 if (isset($_POST['generate_diagnostics'])) {
   $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
   $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
-  $debugLog = '/tmp/zip_manager_diagnostic_zip_debug.log';
+  $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
 
   // Cleanup previous
   @exec("rm -rf " . escapeshellarg($diagFolder));
@@ -369,10 +393,12 @@ if (isset($_POST['generate_diagnostics'])) {
     'last_archived_output.log',
     'last_extracted_output.log',
     'last_check_archive_output.log',
+	'last_archived_owner_permission_change_output.log',
+	'last_extracted_owner_permission_change_output.log',
   ];
 
   foreach ($logFiles as $filename) {
-    $src = "/boot/config/plugins/zip_manager/$filename";
+    $src = "/boot/config/plugins/zip_manager/logs/$filename";
     $dest = "$diagFolder/$filename";
 
     if (!file_exists($src)) continue;
@@ -380,14 +406,43 @@ if (isset($_POST['generate_diagnostics'])) {
     $content = file_get_contents($src);
 
     // 🔒 Redact full paths
-    preg_match_all('#(/\S+)#', $content, $matches);
-    $uniquePaths = array_unique($matches[1]);
-    usort($uniquePaths, fn($a, $b) => strlen($b) - strlen($a)); // longest first
+$excludedPaths = ['/usr/bin/7zzs'];
+$lines = explode("\n", $content);
+$redactedLines = [];
 
-    foreach ($uniquePaths as $i => $path) {
-      $redacted = "[REDACTED_PATH_" . ($i + 1) . "]";
-      $content = str_replace($path, $redacted, $content);
-    }
+foreach ($lines as $line) {
+    $srcAssigned = false;
+    $destAssigned = false;
+
+    $line = preg_replace_callback(
+        '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+        function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+            $path = $match[1];
+
+            // Skip excluded paths
+            foreach ($excludedPaths as $excluded) {
+                if (strpos($path, $excluded) === 0) {
+                    return $match[0]; // leave unchanged
+                }
+            }
+
+            if (!$srcAssigned) {
+                $srcAssigned = true;
+                return '[SRC]';
+            } elseif (!$destAssigned) {
+                $destAssigned = true;
+                return '[DEST]';
+            } else {
+                return '[REDACTED]';
+            }
+        },
+        $line
+    );
+
+    $redactedLines[] = $line;
+}
+
+$content = implode("\n", $redactedLines);
 
     // 🔒 Redact filenames in last_check_archive_output.log
     if ($filename === 'last_check_archive_output.log') {
@@ -718,9 +773,9 @@ if (isset($_POST['generate_diagnostics'])) {
 
 <?php
 // Read the last 5 lines
-$historyLines = file_exists($archiveLogFile) ? array_slice(file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -5) : [];
+$historyLines = file_exists($archiveLogFile) ? array_slice(file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -10) : [];
 
-echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Archiving History logged at /boot/config/plugins/zip_manager/archive_history.log</strong></summary>';
+echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Archiving History logged at /boot/config/plugins/zip_manager/logs/archive_history.log</strong></summary>';
 echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
 echo $historyLines ? htmlspecialchars(implode("\n", $historyLines)) : "No archives created yet";
 echo "</div></details>";

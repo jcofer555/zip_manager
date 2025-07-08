@@ -10,9 +10,14 @@ Markdown="false"
 while (ob_get_level())
   ob_end_clean(); // Clear any existing buffers
 ob_implicit_flush(true); // Enable auto-flushing
-$lastExtractLog = '/boot/config/plugins/zip_manager/last_extracted_output.log';
-$lastListLog = '/boot/config/plugins/zip_manager/last_check_archive_output.log';
-$logFile = '/boot/config/plugins/zip_manager/extract_history.log';
+$logDir = '/boot/config/plugins/zip_manager/logs';
+
+if (!is_dir($logDir)) {
+    mkdir($logDir, 0755, true);
+}
+$lastExtractLog = '/boot/config/plugins/zip_manager/logs/last_extracted_output.log';
+$lastListLog = '/boot/config/plugins/zip_manager/logs/last_check_archive_output.log';
+$logFile = '/boot/config/plugins/zip_manager/logs/extract_history.log';
 $root = '/mnt/';
 $allowedExtensions = [
   '7z', 'zip', 'rar', 'tar', 'gz', 'bz2', 'xz', 'lzma', 'z',
@@ -52,7 +57,7 @@ if ($isDestPicker) {
 function logExtraction($filePath, $destination, $status)
 {
   global $logFile;
-  $logFile = '/boot/config/plugins/zip_manager/extract_history.log';
+  $logFile = '/boot/config/plugins/zip_manager/logs/extract_history.log';
   $timestamp = date('Y-m-d H:i:s');
 
   $entry = "[$timestamp] $status: $filePath → $destination\n";
@@ -71,7 +76,7 @@ function logExtraction($filePath, $destination, $status)
 
   // Trim to last 5 lines
   $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-  $lastFive = array_slice($lines, -5);
+  $lastFive = array_slice($lines, -10);
   file_put_contents($logFile, implode("\n", $lastFive) . "\n", LOCK_EX);
 }
 
@@ -206,7 +211,7 @@ file_put_contents($lastExtractLog, implode("\n", $output));
             // Get list of extracted files from archive
             $extractedPaths = [];
             exec("/usr/bin/7zzs l -ba " . escapeshellarg($filePath), $listOutput);
-			file_put_contents('/boot/config/plugins/zip_manager/last_check_archive_output.log', implode("\n", $listOutput));
+			file_put_contents('/boot/config/plugins/zip_manager/logs/last_check_archive_output.log', implode("\n", $listOutput));
 
             foreach ($listOutput as $line) {
               if (preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
@@ -218,20 +223,36 @@ file_put_contents($lastExtractLog, implode("\n", $output));
               }
             }
 
-            // Apply ownership and permissions
-            foreach ($extractedPaths as $path) {
-              if (!file_exists($path))
-                continue;
-              $escaped = escapeshellarg($path);
-              if (is_dir($path)) {
-                exec("chown nobody:users $escaped");
-                exec("chmod 755 $escaped");
-              } elseif (is_file($path)) {
-                exec("chown nobody:users $escaped");
-                exec("chmod 644 $escaped");
-              }
-            }
-          }
+// Apply ownership and permissions
+$logFile = '/boot/config/plugins/zip_manager/logs/last_extracted_owner_permission_change_output.log';
+$timestamp = date('[Y-m-d H:i:s]');
+$logEntry = "$timestamp Applying ownership and permissions:\n";
+
+foreach ($extractedPaths as $path) {
+    if (!file_exists($path)) {
+        $logEntry .= "Skipped (not found): $path\n";
+        continue;
+    }
+
+    $escaped = escapeshellarg($path);
+
+    if (is_dir($path)) {
+        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+        $chmodOutput = shell_exec("chmod -v 755 $escaped 2>&1");
+        $logEntry .= "Directory: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+    } elseif (is_file($path)) {
+        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+        $chmodOutput = shell_exec("chmod -v 644 $escaped 2>&1");
+        $logEntry .= "File: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+    } else {
+        $logEntry .= "Unknown type (skipped): $path\n";
+    }
+}
+
+// Overwrite the log file with the latest run
+file_put_contents($logFile, $logEntry);
+		  }
+
           if ($resultCode === 0) {
             logExtraction($filePath, $destination, '✅ Success');
             $extractionResult = "<p style='color: green; font-size: 1.2em;'>✅ Extraction Successful</p>";
@@ -394,7 +415,7 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
 if (isset($_POST['generate_diagnostics'])) {
   $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
   $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
-  $debugLog = '/tmp/zip_manager_diagnostic_zip_debug.log';
+  $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
 
   // Cleanup previous
   @exec("rm -rf " . escapeshellarg($diagFolder));
@@ -410,10 +431,12 @@ if (isset($_POST['generate_diagnostics'])) {
     'last_archived_output.log',
     'last_extracted_output.log',
     'last_check_archive_output.log',
+	'last_archived_owner_permission_change_output.log',
+	'last_extracted_owner_permission_change_output.log',
   ];
 
   foreach ($logFiles as $filename) {
-    $src = "/boot/config/plugins/zip_manager/$filename";
+    $src = "/boot/config/plugins/zip_manager/logs/$filename";
     $dest = "$diagFolder/$filename";
 
     if (!file_exists($src)) continue;
@@ -421,14 +444,45 @@ if (isset($_POST['generate_diagnostics'])) {
     $content = file_get_contents($src);
 
     // 🔒 Redact full paths
-    preg_match_all('#(/\S+)#', $content, $matches);
-    $uniquePaths = array_unique($matches[1]);
-    usort($uniquePaths, fn($a, $b) => strlen($b) - strlen($a)); // longest first
+$excludedPaths = ['/usr/bin/7zzs'];
+$lines = explode("\n", $content);
+$redactedLines = [];
 
-    foreach ($uniquePaths as $i => $path) {
-      $redacted = "[REDACTED_PATH_" . ($i + 1) . "]";
-      $content = str_replace($path, $redacted, $content);
-    }
+foreach ($lines as $line) {
+    $srcAssigned = false;
+    $destAssigned = false;
+
+    $line = preg_replace_callback(
+        '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+        function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+            $path = $match[1];
+
+            // Skip excluded paths
+            foreach ($excludedPaths as $excluded) {
+                if (strpos($path, $excluded) === 0) {
+                    return $match[0]; // leave unchanged
+                }
+            }
+
+            if (!$srcAssigned) {
+                $srcAssigned = true;
+                return '[SRC]';
+            } elseif (!$destAssigned) {
+                $destAssigned = true;
+                return '[DEST]';
+            } else {
+                return '[REDACTED]';
+            }
+        },
+        $line
+    );
+
+    $redactedLines[] = $line;
+}
+
+$content = implode("\n", $redactedLines);
+
+
 
     // 🔒 Redact filenames in last_check_archive_output.log
     if ($filename === 'last_check_archive_output.log') {
@@ -745,7 +799,7 @@ if (isset($_POST['generate_diagnostics'])) {
 
 <?php
 // Read the last 5 lines
-$historyLines = file_exists($logFile) ? array_slice(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -5) : [];
+$historyLines = file_exists($logFile) ? array_slice(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -10) : [];
 
 echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Extraction History logged at /boot/config/plugins/zip_manager/extract_history.log</strong></summary>';
 echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
