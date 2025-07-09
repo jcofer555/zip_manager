@@ -18,6 +18,7 @@ define('MAX_ARCHIVE_SIZE', 500 * 1024 * 1024); // 500 MB
 $root = '/mnt/';
 $archiveResult = '';
 $archiveName = $_GET['name'] ?? ($_POST['zip_name'] ?? 'archive');
+$archivePassword = $_POST['zip_password'] ?? '';
 
 // Helper to format file sizes
 function formatBytes($bytes, $precision = 1)
@@ -108,8 +109,8 @@ if ($isDestPicker) {
 }
 
 $format = $_SERVER['REQUEST_METHOD'] === 'POST'
-  ? ($_POST['zip_format'] ?? 'zip')
-  : ($_GET['format'] ?? 'zip');
+  ? ($_POST['zip_format'] ?? '7z')
+  : ($_GET['format'] ?? '7z');
 
 $zipSources = array_filter(array_map('trim', explode(',', $_GET['sources'] ?? $_POST['zip_sources'] ?? '')));
 $zipSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', $p), $zipSources));
@@ -159,19 +160,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $_POST['zip_name'] ?? 'archive');
       $format = $_POST['zip_format'] ?? 'zip';
       $outputPath = $dest ? rtrim($dest, '/') . '/' . $name . '.' . ($format === 'tar.gz' ? 'tar.gz' : $format) : '';
+	  // 🔐 Handle optional password
+$password = trim($_POST['zip_password'] ?? '');
+$supportsPassword = in_array($format, ['zip', '7z']);
+$useHeaderEncryption = ($format === '7z'); // Only for .7z
+
+$passArg = ($password !== '' && $supportsPassword)
+  ? "-p" . escapeshellarg($password) . ($useHeaderEncryption ? " -mhe=on" : "")
+  : '';
 
       if (!$outputPath || empty($sources)) {
         $archiveResult = "<pre>❌ Please provide both source paths and a destination folder.</pre><hr>";
-      } elseif (file_exists($outputPath) && !isset($_POST['proceed'])) {
-        $archiveResult = "<pre>⚠️ Archive already exists:\n\n$outputPath\n\nPlease confirm to overwrite.</pre>";
-        $archiveResult .= '<form method="post">';
-        $archiveResult .= '<input type="hidden" name="zip_sources" value="' . htmlspecialchars(implode(',', $sources)) . '">';
-        $archiveResult .= '<input type="hidden" name="zip_output_base" value="' . htmlspecialchars($dest) . '">';
-        $archiveResult .= '<input type="hidden" name="zip_name" value="' . htmlspecialchars($name) . '">';
-        $archiveResult .= '<input type="hidden" name="zip_format" value="' . htmlspecialchars($format) . '">';
-        $archiveResult .= '<input type="hidden" name="proceed" value="1">';
-        $archiveResult .= '<input type="submit" name="create" value="✅ Overwrite">';
-        $archiveResult .= '</form><hr>';
+} elseif (file_exists($outputPath) && !isset($_POST['proceed'])) {
+  $archiveResult = "<pre>⚠️ Archive already exists:\n\n$outputPath\n\nPlease confirm to overwrite.</pre>";
+
+  // ✅ Preserve password for overwrite form
+  $preservedPassword = htmlspecialchars($password ?? '');
+
+  $archiveResult .= '<form method="post">';
+  $archiveResult .= '<input type="hidden" name="zip_sources" value="' . htmlspecialchars(implode(',', $sources)) . '">';
+  $archiveResult .= '<input type="hidden" name="zip_output_base" value="' . htmlspecialchars($dest) . '">';
+  $archiveResult .= '<input type="hidden" name="zip_name" value="' . htmlspecialchars($name) . '">';
+  $archiveResult .= '<input type="hidden" name="zip_format" value="' . htmlspecialchars($format) . '">';
+  $archiveResult .= '<input type="hidden" name="zip_password" value="' . $preservedPassword . '">';
+  $archiveResult .= '<input type="hidden" name="proceed" value="1">';
+  $archiveResult .= '<input type="submit" name="create" value="✅ Overwrite">';
+  $archiveResult .= '</form><hr>';
       } else {
         $escapedSources = array_map('escapeshellarg', $sources);
 
@@ -198,7 +212,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unlink($outputPath); // clean up failed archive
           }
         } else {
-          $cmd = "/usr/bin/7zzs a " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
+			if (isset($_POST['proceed']) && file_exists($outputPath)) {
+  unlink($outputPath); // force clean overwrite
+}
+          $cmd = "/usr/bin/7zzs a $passArg " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
           exec($cmd, $zipOutput, $zipCode);
 		  file_put_contents(
 			"/boot/config/plugins/zip_manager/logs/last_archived_output.log",
@@ -571,6 +588,25 @@ $content = implode("\n", $redactedLines);
     }
   </script>
 
+<div class="form-row" id="password_row" style="<?= $format === '7z' ? '' : 'display: none;' ?>">
+  <label>Archive password:</label>
+  <div style="position: relative; display: inline-block;">
+    <input type="password" name="zip_password" id="zip_password" value="<?= htmlspecialchars($archivePassword) ?>"
+      style="width: 300px; padding-right: 1em;">
+      <?php if (empty($archivePassword)): ?>
+        <span style="
+          position: absolute;
+          left: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #aaa;
+          pointer-events: none;
+          font-style: italic;
+        ">Optional</span>
+      <?php endif; ?>  
+  </div>
+</div>
+
   <div class="form-row" style="align-items: center;">
     <label>Archive format:</label>
     <select name="zip_format" id="zip_format" style="
@@ -585,8 +621,8 @@ $content = implode("\n", $redactedLines);
       -webkit-appearance: none;
       -moz-appearance: none;
     ">
-      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
       <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7Z</option>
+      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
       <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR</option>
       <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ</option>
     </select>
@@ -907,4 +943,34 @@ if (isset($_POST['clear_history'])) {
 
     window.location.href = url.toString();
   }
+</script>
+<script>
+  let cachedPassword = ''; // Store the password temporarily
+
+function togglePasswordField() {
+  const format = document.getElementById('zip_format').value;
+  const passwordRow = document.getElementById('password_row');
+
+  if (format === '7z') {
+    passwordRow.style.display = 'flex';
+  } else {
+    passwordRow.style.display = 'none';
+  }
+}
+
+  document.addEventListener('DOMContentLoaded', togglePasswordField);
+  document.getElementById('zip_format').addEventListener('change', togglePasswordField);
+</script>
+<script>
+  const passwordInput = document.getElementById('zip_password');
+  const passwordPlaceholder = passwordInput?.nextElementSibling;
+
+  function togglePasswordPlaceholder() {
+    if (passwordPlaceholder) {
+      passwordPlaceholder.style.display = passwordInput.value.trim() ? 'none' : 'inline';
+    }
+  }
+
+  passwordInput?.addEventListener('input', togglePasswordPlaceholder);
+  document.addEventListener('DOMContentLoaded', togglePasswordPlaceholder);
 </script>

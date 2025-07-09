@@ -18,6 +18,7 @@ if (!is_dir($logDir)) {
 $lastExtractLog = '/boot/config/plugins/zip_manager/logs/last_extracted_output.log';
 $lastListLog = '/boot/config/plugins/zip_manager/logs/last_check_archive_output.log';
 $logFile = '/boot/config/plugins/zip_manager/logs/extract_history.log';
+$showPasswordField = false;
 $root = '/mnt/';
 $allowedExtensions = [
   '7z', 'zip', 'rar', 'tar', 'gz', 'bz2', 'xz', 'lzma', 'z',
@@ -114,6 +115,25 @@ function renderBreadcrumb($base, $current, $queryKey, $extra = [])
 $selectedFile = $_GET['file'] ?? $_POST['selected_file'] ?? '';
 $selectedDestRel = $_GET['dest'] ?? $_POST['destination'] ?? '';
 $selectedDestFull = $selectedDestRel ? $root . ltrim($selectedDestRel, '/') : '';
+$archivePassword = $_POST['extract_password'] ?? $_GET['extract_password'] ?? '';
+
+$showPasswordField = false;
+
+if (!empty($selectedFile) && file_exists($selectedFile)) {
+  $ext = strtolower(pathinfo($selectedFile, PATHINFO_EXTENSION));
+  if (preg_match('/\.tar\.gz$/i', $selectedFile)) $ext = 'tar.gz';
+
+  if ($ext === '7z') {
+    $dummyPass = "-pWRONGPASS";
+    exec("/usr/bin/7zzs l $dummyPass " . escapeshellarg($selectedFile) . " 2>&1", $listOutput);
+    foreach ($listOutput as $line) {
+      if (stripos($line, 'Wrong password') !== false || stripos($line, 'Can not open encrypted archive') !== false) {
+        $showPasswordField = true;
+        break;
+      }
+    }
+  }
+}
 
 // Clear logic
 if (isset($_POST['clear'])) {
@@ -123,6 +143,8 @@ if (isset($_POST['clear'])) {
 
 // Preview or extract
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
+	$password = trim($_POST['extract_password'] ?? '');
+$passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
   $filePath = $_POST['selected_file'];
   $destination = $_POST['destination'] ?? '';
   $destination = preg_replace('#/+#', '/', $destination);
@@ -141,21 +163,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
       $extractionResult = "<p style='color: red; font-size: 1.2em;'>❌ Archive file is too large. Maximum allowed size for extraction is 500 MB.</p><hr>";
     } else {
       $filename = basename($filePath);
-      $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
       if (preg_match('/\.tar\.gz$/i', $filename))
         $ext = 'tar.gz';
 
       if (!in_array($ext, $allowedExtensions)) {
         $extractionResult = "<pre>❌ Invalid file type: .$ext</pre><hr>";
-      } elseif ($isPreview) {
-        if (!$destination || !is_dir($destination)) {
-          $extractionResult = "<pre>❌ Please select a valid destination folder before extracting.</pre><hr>";
-          return;
-        }
-        exec("/usr/bin/7zzs l -ba " . escapeshellarg($filePath), $output);
-        $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
-        $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
-      } elseif ($isExtract) {
+} elseif ($isPreview) {
+  if (!$destination || !is_dir($destination)) {
+    $extractionResult = "<pre>❌ Please select a valid destination folder before extracting.</pre><hr>";
+    return;
+  }
+
+  $password = trim($_POST['extract_password'] ?? '');
+  $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
+
+  exec("/usr/bin/7zzs l -ba $passArg " . escapeshellarg($filePath) . " 2>&1", $output, $exitCode);
+
+  $outputText = implode("\n", $output);
+  $previewFailed = false;
+
+  if (stripos($outputText, 'Wrong password') !== false ||
+      stripos($outputText, 'Can not open encrypted archive') !== false ||
+      stripos($outputText, 'Break signaled') !== false) {
+    $previewFailed = true;
+  }
+
+  if ($previewFailed) {
+    $previewResult = "<p style='color: red; font-weight: bold;'>❌ Archive is encrypted. Please enter the correct password to preview contents.</p>";
+  } else {
+    $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
+    $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
+  }
+} elseif ($isExtract) {
         $conflicts = [];
         $files = [];
         $inListing = false;
@@ -193,6 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
           $extractionResult .= '<input type="hidden" name="destination" value="' . htmlspecialchars($destination) . '">';
           $extractionResult .= '<input type="hidden" name="extract" value="1">';
           $extractionResult .= '<input type="hidden" name="proceed" value="1">';
+		  $extractionResult .= '<input type="hidden" name="extract_password" value="' . htmlspecialchars($archivePassword) . '">';
           $extractionResult .= '<input type="submit" value="✅ Overwrite">';
           $extractionResult .= '</form><hr>';
         } else {
@@ -203,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
           if (function_exists('ob_flush'))
             ob_flush();
 
-$cmd = "/usr/bin/7zzs x " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
+$cmd = "/usr/bin/7zzs x $passArg " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
 exec($cmd . " 2>&1", $output, $resultCode);
 file_put_contents($lastExtractLog, implode("\n", $output));
 
@@ -568,11 +609,32 @@ $content = implode("\n", $redactedLines);
     </div>
   </div>
 
+<?php if (!empty($selectedFile) && $showPasswordField): ?>
+  <div class="form-row" id="password_row">
+    <label>Archive password:</label>
+	<div style="position: relative; display: inline-block;">
+    <input type="password" name="extract_password" id="extract_password" value="<?= htmlspecialchars($archivePassword) ?>"
+	style="width: 300px; padding-right: 1em;">
+	      <?php if (empty($archivePassword)): ?>
+        <span style="
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+      pointer-events: none;
+      font-style: italic;
+    ">Required</span>
+      <?php endif; ?>
+  </div>
+  </div>
+<?php endif; ?>
+
   <div class="form-row">
     <label>Destination folder:</label>
     <div style="position: relative; display: inline-block;">
-      <input type="text" name="destination_display" readonly value="<?= htmlspecialchars($selectedDestFull) ?>"
-        onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'"
+<input type="text" name="destination_display" readonly value="<?= htmlspecialchars($selectedDestFull) ?>"
+  onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>&extract_password=<?= urlencode($archivePassword) ?>'"
         style="width: 300px; padding-right: 1em;">
       <?php if (empty($selectedDestFull)): ?>
         <span style="
@@ -771,14 +833,16 @@ $content = implode("\n", $redactedLines);
         $isTopLevel = ($depth === 0);
         $isSelected = ($selectedDestFull === $normalized);
 
-        $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
-          '&file=' . urlencode($selectedFile) .
-          '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/'));
+$toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
+  '&file=' . urlencode($selectedFile) .
+  '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
+  '&extract_password=' . urlencode($archivePassword);
 
         $browseRel = trim(str_replace($root, '', $path), '/');
-        $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
-          '&file=' . urlencode($selectedFile) .
-          '&dest=' . urlencode($selectedDestRel);
+$browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
+  '&file=' . urlencode($selectedFile) .
+  '&dest=' . urlencode($selectedDestRel) .
+  '&extract_password=' . urlencode($archivePassword);
 
         echo '<div style="display:flex; align-items:center; gap:0.5em;">';
         echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
@@ -900,5 +964,20 @@ if (isset($_POST['clear_history'])) {
       document.querySelector('input[name="selected_file"]').value = '';
       document.querySelector('input[name="destination"]').value = '';
     }
+  });
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const pwInput = document.getElementById('extract_password');
+    const pwPlaceholder = pwInput?.nextElementSibling;
+
+    function togglePasswordPlaceholder() {
+      if (pwPlaceholder) {
+        pwPlaceholder.style.display = pwInput.value.trim() ? 'none' : 'inline';
+      }
+    }
+
+    pwInput?.addEventListener('input', togglePasswordPlaceholder);
+    togglePasswordPlaceholder(); // Call once on load
   });
 </script>
