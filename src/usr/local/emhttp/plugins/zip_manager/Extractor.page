@@ -13,7 +13,7 @@ ob_implicit_flush(true); // Enable auto-flushing
 $logDir = '/boot/config/plugins/zip_manager/logs';
 
 if (!is_dir($logDir)) {
-    mkdir($logDir, 0755, true);
+  mkdir($logDir, 0755, true);
 }
 $lastExtractLog = '/boot/config/plugins/zip_manager/logs/last_extracted_output.log';
 $lastListLog = '/boot/config/plugins/zip_manager/logs/last_check_archive_output.log';
@@ -21,11 +21,39 @@ $logFile = '/boot/config/plugins/zip_manager/logs/extract_history.log';
 $showPasswordField = false;
 $root = '/mnt/';
 $allowedExtensions = [
-  '7z', 'zip', 'rar', 'tar', 'gz', 'bz2', 'xz', 'lzma', 'z',
-  'cab', 'arj', 'iso', 'udf', 'wim', 'dmg', 'vhd', 'vmdk',
-  'msi', 'deb', 'rpm', 'cpio', 'chm', 'nsis', 'exe',
-  'tar.gz', 'tar.bz2', 'tar.xz', 'tar.zst',
-  'lzh', 'lha', 'ace', 'zst', 'img'
+  '7z',
+  'zip',
+  'rar',
+  'tar',
+  'gz',
+  'bz2',
+  'xz',
+  'lzma',
+  'z',
+  'cab',
+  'arj',
+  'iso',
+  'udf',
+  'wim',
+  'dmg',
+  'vhd',
+  'vmdk',
+  'msi',
+  'deb',
+  'rpm',
+  'cpio',
+  'chm',
+  'nsis',
+  'exe',
+  'tar.gz',
+  'tar.bz2',
+  'tar.xz',
+  'tar.zst',
+  'lzh',
+  'lha',
+  'ace',
+  'zst',
+  'img'
 ];
 
 $extractionResult = '';
@@ -121,7 +149,8 @@ $showPasswordField = false;
 
 if (!empty($selectedFile) && file_exists($selectedFile)) {
   $ext = strtolower(pathinfo($selectedFile, PATHINFO_EXTENSION));
-  if (preg_match('/\.tar\.gz$/i', $selectedFile)) $ext = 'tar.gz';
+  if (preg_match('/\.tar\.gz$/i', $selectedFile))
+    $ext = 'tar.gz';
 
   if ($ext === '7z') {
     $dummyPass = "-pWRONGPASS";
@@ -143,8 +172,8 @@ if (isset($_POST['clear'])) {
 
 // Preview or extract
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
-	$password = trim($_POST['extract_password'] ?? '');
-$passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
+  $password = trim($_POST['extract_password'] ?? '');
+  $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
   $filePath = $_POST['selected_file'];
   $destination = $_POST['destination'] ?? '';
   $destination = preg_replace('#/+#', '/', $destination);
@@ -169,33 +198,35 @@ $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
 
       if (!in_array($ext, $allowedExtensions)) {
         $extractionResult = "<pre>❌ Invalid file type: .$ext</pre><hr>";
-} elseif ($isPreview) {
-  if (!$destination || !is_dir($destination)) {
-    $extractionResult = "<pre>❌ Please select a valid destination folder before extracting.</pre><hr>";
-    return;
-  }
+      } elseif ($isPreview) {
+        if (!$destination || !is_dir($destination)) {
+          $extractionResult = "<pre>❌ Please select a valid destination folder before extracting.</pre><hr>";
+          return;
+        }
 
-  $password = trim($_POST['extract_password'] ?? '');
-  $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
+        $password = trim($_POST['extract_password'] ?? '');
+        $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
 
-  exec("/usr/bin/7zzs l -ba $passArg " . escapeshellarg($filePath) . " 2>&1", $output, $exitCode);
+        exec("/usr/bin/7zzs l -ba $passArg " . escapeshellarg($filePath) . " 2>&1", $output, $exitCode);
 
-  $outputText = implode("\n", $output);
-  $previewFailed = false;
+        $outputText = implode("\n", $output);
+        $previewFailed = false;
 
-  if (stripos($outputText, 'Wrong password') !== false ||
-      stripos($outputText, 'Can not open encrypted archive') !== false ||
-      stripos($outputText, 'Break signaled') !== false) {
-    $previewFailed = true;
-  }
+        if (
+          stripos($outputText, 'Wrong password') !== false ||
+          stripos($outputText, 'Can not open encrypted archive') !== false ||
+          stripos($outputText, 'Break signaled') !== false
+        ) {
+          $previewFailed = true;
+        }
 
-  if ($previewFailed) {
-    $previewResult = "<p style='color: red; font-weight: bold;'>❌ Archive is encrypted. Please enter the correct password to preview contents.</p>";
-  } else {
-    $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
-    $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
-  }
-} elseif ($isExtract) {
+        if ($previewFailed) {
+          $previewResult = "<p style='color: red; font-weight: bold;'>❌ Archive is encrypted. Please enter the correct password to preview contents.</p>";
+        } else {
+          $filtered = array_filter($output, fn($line) => trim($line) !== '' && !str_starts_with($line, 'Listing archive:'));
+          $previewResult = "<div class='preview-box'><strong>📦 Archive Contents:</strong><br><pre>" . htmlspecialchars(implode("\n", $filtered)) . "</pre></div>";
+        }
+      } elseif ($isExtract) {
         $conflicts = [];
         $files = [];
         $inListing = false;
@@ -233,7 +264,7 @@ $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
           $extractionResult .= '<input type="hidden" name="destination" value="' . htmlspecialchars($destination) . '">';
           $extractionResult .= '<input type="hidden" name="extract" value="1">';
           $extractionResult .= '<input type="hidden" name="proceed" value="1">';
-		  $extractionResult .= '<input type="hidden" name="extract_password" value="' . htmlspecialchars($archivePassword) . '">';
+          $extractionResult .= '<input type="hidden" name="extract_password" value="' . htmlspecialchars($archivePassword) . '">';
           $extractionResult .= '<input type="submit" value="✅ Overwrite">';
           $extractionResult .= '</form><hr>';
         } else {
@@ -244,15 +275,15 @@ $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
           if (function_exists('ob_flush'))
             ob_flush();
 
-$cmd = "/usr/bin/7zzs x $passArg " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
-exec($cmd . " 2>&1", $output, $resultCode);
-file_put_contents($lastExtractLog, implode("\n", $output));
+          $cmd = "/usr/bin/7zzs x $passArg " . escapeshellarg($filePath) . " -o" . escapeshellarg($destination) . " -y";
+          exec($cmd . " 2>&1", $output, $resultCode);
+          file_put_contents($lastExtractLog, implode("\n", $output));
 
           if ($resultCode === 0) {
             // Get list of extracted files from archive
             $extractedPaths = [];
             exec("/usr/bin/7zzs l -ba " . escapeshellarg($filePath), $listOutput);
-			file_put_contents('/boot/config/plugins/zip_manager/logs/last_check_archive_output.log', implode("\n", $listOutput));
+            file_put_contents('/boot/config/plugins/zip_manager/logs/last_check_archive_output.log', implode("\n", $listOutput));
 
             foreach ($listOutput as $line) {
               if (preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
@@ -264,35 +295,35 @@ file_put_contents($lastExtractLog, implode("\n", $output));
               }
             }
 
-// Apply ownership and permissions
-$logFile = '/boot/config/plugins/zip_manager/logs/last_extracted_owner_permission_change_output.log';
-$timestamp = date('[Y-m-d H:i:s]');
-$logEntry = "$timestamp Applying ownership and permissions:\n";
+            // Apply ownership and permissions
+            $logFile = '/boot/config/plugins/zip_manager/logs/last_extracted_owner_permission_change_output.log';
+            $timestamp = date('[Y-m-d H:i:s]');
+            $logEntry = "$timestamp Applying ownership and permissions:\n";
 
-foreach ($extractedPaths as $path) {
-    if (!file_exists($path)) {
-        $logEntry .= "Skipped (not found): $path\n";
-        continue;
-    }
+            foreach ($extractedPaths as $path) {
+              if (!file_exists($path)) {
+                $logEntry .= "Skipped (not found): $path\n";
+                continue;
+              }
 
-    $escaped = escapeshellarg($path);
+              $escaped = escapeshellarg($path);
 
-    if (is_dir($path)) {
-        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
-        $chmodOutput = shell_exec("chmod -v 755 $escaped 2>&1");
-        $logEntry .= "Directory: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
-    } elseif (is_file($path)) {
-        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
-        $chmodOutput = shell_exec("chmod -v 644 $escaped 2>&1");
-        $logEntry .= "File: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
-    } else {
-        $logEntry .= "Unknown type (skipped): $path\n";
-    }
-}
+              if (is_dir($path)) {
+                $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+                $chmodOutput = shell_exec("chmod -v 755 $escaped 2>&1");
+                $logEntry .= "Directory: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+              } elseif (is_file($path)) {
+                $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+                $chmodOutput = shell_exec("chmod -v 644 $escaped 2>&1");
+                $logEntry .= "File: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+              } else {
+                $logEntry .= "Unknown type (skipped): $path\n";
+              }
+            }
 
-// Overwrite the log file with the latest run
-file_put_contents($logFile, $logEntry);
-		  }
+            // Overwrite the log file with the latest run
+            file_put_contents($logFile, $logEntry);
+          }
 
           if ($resultCode === 0) {
             logExtraction($filePath, $destination, '✅ Success');
@@ -439,7 +470,8 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
     </form>
 
     <!-- Support Forum -->
-    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
+    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank"
+      style="margin: 0;">
       <input type="submit" value="❓ Support Forum" style="margin-top: 0.1em;">
     </form>
 
@@ -452,135 +484,136 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
 
 <div style="display: flex;">
   <div style="margin-left: auto; width: 240px;">
-<?php
-if (isset($_POST['generate_diagnostics'])) {
-  $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
-  $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
-  $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
+    <?php
+    if (isset($_POST['generate_diagnostics'])) {
+      $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
+      $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
+      $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
 
-  // Cleanup previous
-  @exec("rm -rf " . escapeshellarg($diagFolder));
-  @unlink($diagZip);
-  @unlink($debugLog);
+      // Cleanup previous
+      @exec("rm -rf " . escapeshellarg($diagFolder));
+      @unlink($diagZip);
+      @unlink($debugLog);
 
-  mkdir($diagFolder, 0755, true);
+      mkdir($diagFolder, 0755, true);
 
-  // Files to redact + copy
-  $logFiles = [
-    'archive_history.log',
-    'extract_history.log',
-    'last_archived_output.log',
-    'last_extracted_output.log',
-    'last_check_archive_output.log',
-	'last_archived_owner_permission_change_output.log',
-	'last_extracted_owner_permission_change_output.log',
-  ];
+      // Files to redact + copy
+      $logFiles = [
+        'archive_history.log',
+        'extract_history.log',
+        'last_archived_output.log',
+        'last_extracted_output.log',
+        'last_check_archive_output.log',
+        'last_archived_owner_permission_change_output.log',
+        'last_extracted_owner_permission_change_output.log',
+      ];
 
-  foreach ($logFiles as $filename) {
-    $src = "/boot/config/plugins/zip_manager/logs/$filename";
-    $dest = "$diagFolder/$filename";
+      foreach ($logFiles as $filename) {
+        $src = "/boot/config/plugins/zip_manager/logs/$filename";
+        $dest = "$diagFolder/$filename";
 
-    if (!file_exists($src)) continue;
+        if (!file_exists($src))
+          continue;
 
-    $content = file_get_contents($src);
+        $content = file_get_contents($src);
 
-    // 🔒 Redact full paths
-$excludedPaths = ['/usr/bin/7zzs'];
-$lines = explode("\n", $content);
-$redactedLines = [];
+        // 🔒 Redact full paths
+        $excludedPaths = ['/usr/bin/7zzs'];
+        $lines = explode("\n", $content);
+        $redactedLines = [];
 
-foreach ($lines as $line) {
-    $srcAssigned = false;
-    $destAssigned = false;
+        foreach ($lines as $line) {
+          $srcAssigned = false;
+          $destAssigned = false;
 
-    $line = preg_replace_callback(
-        '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
-        function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
-            $path = $match[1];
+          $line = preg_replace_callback(
+            '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+            function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+              $path = $match[1];
 
-            // Skip excluded paths
-            foreach ($excludedPaths as $excluded) {
+              // Skip excluded paths
+              foreach ($excludedPaths as $excluded) {
                 if (strpos($path, $excluded) === 0) {
-                    return $match[0]; // leave unchanged
+                  return $match[0]; // leave unchanged
                 }
-            }
+              }
 
-            if (!$srcAssigned) {
+              if (!$srcAssigned) {
                 $srcAssigned = true;
                 return '[SRC]';
-            } elseif (!$destAssigned) {
+              } elseif (!$destAssigned) {
                 $destAssigned = true;
                 return '[DEST]';
-            } else {
+              } else {
                 return '[REDACTED]';
-            }
-        },
-        $line
-    );
+              }
+            },
+            $line
+          );
 
-    $redactedLines[] = $line;
-}
-
-$content = implode("\n", $redactedLines);
-
-
-
-    // 🔒 Redact filenames in last_check_archive_output.log
-    if ($filename === 'last_check_archive_output.log') {
-      $lines = explode("\n", $content);
-      $redactedLines = array_map(function ($line) {
-        // Match: date time flags size size filename
-        if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+.+?\s+\d+\s+\d+\s+)(.+)$/', $line, $matches)) {
-          return $matches[1] . '[REDACTED_FILENAME]';
+          $redactedLines[] = $line;
         }
-        return $line;
-      }, $lines);
-      $content = implode("\n", $redactedLines);
-    }
 
-    file_put_contents($dest, $content);
-  }
+        $content = implode("\n", $redactedLines);
 
-  // Redacted system info (remove hostname)
-  $hostname = php_uname('n');
-  $plgFile = '/boot/config/plugins/zip_manager.plg';
 
-  if (file_exists($plgFile)) {
-    $raw = file_get_contents($plgFile);
-    libxml_use_internal_errors(true);
-    $xml = simplexml_load_string($raw);
-    if ($xml === false) {
-      echo "Failed to parse XML.";
-      foreach (libxml_get_errors() as $error) {
-        echo "<br>", htmlspecialchars($error->message);
+
+        // 🔒 Redact filenames in last_check_archive_output.log
+        if ($filename === 'last_check_archive_output.log') {
+          $lines = explode("\n", $content);
+          $redactedLines = array_map(function ($line) {
+            // Match: date time flags size size filename
+            if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+.+?\s+\d+\s+\d+\s+)(.+)$/', $line, $matches)) {
+              return $matches[1] . '[REDACTED_FILENAME]';
+            }
+            return $line;
+          }, $lines);
+          $content = implode("\n", $redactedLines);
+        }
+
+        file_put_contents($dest, $content);
       }
-    } else {
-      $version = (string) $xml['version'] ?? 'unknown';
+
+      // Redacted system info (remove hostname)
+      $hostname = php_uname('n');
+      $plgFile = '/boot/config/plugins/zip_manager.plg';
+
+      if (file_exists($plgFile)) {
+        $raw = file_get_contents($plgFile);
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($raw);
+        if ($xml === false) {
+          echo "Failed to parse XML.";
+          foreach (libxml_get_errors() as $error) {
+            echo "<br>", htmlspecialchars($error->message);
+          }
+        } else {
+          $version = (string) $xml['version'] ?? 'unknown';
+        }
+      }
+
+      $sysInfo = "Generated: " . date('Y-m-d H:i:s') . "\n";
+      $sysInfo .= str_replace($hostname, '[REDACTED_HOST]', php_uname()) . "\n";
+      $sysInfo .= "PHP Version: " . phpversion() . "\n";
+      $sysInfo .= "Plugin Version: " . $version . "\n";
+
+      file_put_contents("$diagFolder/system_info.log", $sysInfo);
+
+      // Create ZIP
+      $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($diagZip) . " " . escapeshellarg($diagFolder) . " 2>&1";
+      exec($cmd, $zipOutput, $exitCode);
+      file_put_contents($debugLog, implode("\n", $zipOutput));
+
+      // Delete diagnostics folder after zip created
+      exec("rm -rf " . escapeshellarg($diagFolder));
+
+      if (file_exists($diagZip)) {
+        echo "<p style='color:green;'>✅ Diagnostics created: <a href='/boot/config/plugins/zip_manager/" . basename($diagZip) . "' download>Download ZIP</a></p>";
+      } else {
+        echo "<p style='color:red;'>❌ Failed to create diagnostics zip (code $exitCode)</p>";
+      }
     }
-  }
-
-  $sysInfo = "Generated: " . date('Y-m-d H:i:s') . "\n";
-  $sysInfo .= str_replace($hostname, '[REDACTED_HOST]', php_uname()) . "\n";
-  $sysInfo .= "PHP Version: " . phpversion() . "\n";
-  $sysInfo .= "Plugin Version: " . $version . "\n";
-
-  file_put_contents("$diagFolder/system_info.log", $sysInfo);
-
-  // Create ZIP
-  $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($diagZip) . " " . escapeshellarg($diagFolder) . " 2>&1";
-  exec($cmd, $zipOutput, $exitCode);
-  file_put_contents($debugLog, implode("\n", $zipOutput));
-
-  // Delete diagnostics folder after zip created
-  exec("rm -rf " . escapeshellarg($diagFolder));
-
-  if (file_exists($diagZip)) {
-    echo "<p style='color:green;'>✅ Diagnostics created: <a href='/boot/config/plugins/zip_manager/" . basename($diagZip) . "' download>Download ZIP</a></p>";
-  } else {
-    echo "<p style='color:red;'>❌ Failed to create diagnostics zip (code $exitCode)</p>";
-  }
-}
-?>
+    ?>
   </div>
 </div>
 
@@ -609,14 +642,14 @@ $content = implode("\n", $redactedLines);
     </div>
   </div>
 
-<?php if (!empty($selectedFile) && $showPasswordField): ?>
-  <div class="form-row" id="password_row">
-    <label>Archive password:</label>
-	<div style="position: relative; display: inline-block;">
-    <input type="password" name="extract_password" id="extract_password" value="<?= htmlspecialchars($archivePassword) ?>"
-	style="width: 300px; padding-right: 1em;">
-	      <?php if (empty($archivePassword)): ?>
-        <span style="
+  <?php if (!empty($selectedFile) && $showPasswordField): ?>
+    <div class="form-row" id="password_row">
+      <label>Archive password:</label>
+      <div style="position: relative; display: inline-block;">
+        <input type="password" name="extract_password" id="extract_password"
+          value="<?= htmlspecialchars($archivePassword) ?>" style="width: 300px; padding-right: 1em;">
+        <?php if (empty($archivePassword)): ?>
+          <span style="
       position: absolute;
       left: 8px;
       top: 50%;
@@ -625,16 +658,16 @@ $content = implode("\n", $redactedLines);
       pointer-events: none;
       font-style: italic;
     ">Required</span>
-      <?php endif; ?>
-  </div>
-  </div>
-<?php endif; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  <?php endif; ?>
 
   <div class="form-row">
     <label>Destination folder:</label>
     <div style="position: relative; display: inline-block;">
-<input type="text" name="destination_display" readonly value="<?= htmlspecialchars($selectedDestFull) ?>"
-  onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>&extract_password=<?= urlencode($archivePassword) ?>'"
+      <input type="text" name="destination_display" readonly value="<?= htmlspecialchars($selectedDestFull) ?>"
+        onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>&extract_password=<?= urlencode($archivePassword) ?>'"
         style="width: 300px; padding-right: 1em;">
       <?php if (empty($selectedDestFull)): ?>
         <span style="
@@ -833,16 +866,16 @@ $content = implode("\n", $redactedLines);
         $isTopLevel = ($depth === 0);
         $isSelected = ($selectedDestFull === $normalized);
 
-$toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
-  '&file=' . urlencode($selectedFile) .
-  '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
-  '&extract_password=' . urlencode($archivePassword);
+        $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
+          '&file=' . urlencode($selectedFile) .
+          '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
+          '&extract_password=' . urlencode($archivePassword);
 
         $browseRel = trim(str_replace($root, '', $path), '/');
-$browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
-  '&file=' . urlencode($selectedFile) .
-  '&dest=' . urlencode($selectedDestRel) .
-  '&extract_password=' . urlencode($archivePassword);
+        $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
+          '&file=' . urlencode($selectedFile) .
+          '&dest=' . urlencode($selectedDestRel) .
+          '&extract_password=' . urlencode($archivePassword);
 
         echo '<div style="display:flex; align-items:center; gap:0.5em;">';
         echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
