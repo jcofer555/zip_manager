@@ -1,0 +1,76 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN>
+
+<PLUGIN 
+  name="zip_manager"
+  author="jcofer555"
+  version="2025.07.10.1.dev"
+  launch="Tools/Extractor"
+  pluginURL="https://raw.githubusercontent.com/jcofer555/zip_manager/main/plugin/zip_manager.plg"
+  support="https://forums.unraid.net/topic/191678-7-zip-for-unraid/"
+  min="7.0.0"
+  
+  icon="icon.png"
+>
+
+<CHANGES>
+<![CDATA[
+###2025.07.10.1.dev###
+- Initial release
+
+For older releases, see https://github.com/jcofer555/zip_manager/releases
+]]>
+</CHANGES>
+
+<FILE Name="/boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz">
+<URL>https://github.com/jcofer555/zip_manager/raw/refs/tags/2025.07.10.1.dev/packages/7z2409-linux-x64.tar.xz</URL>
+<SHA256>914c7e20ad5ef8e4d3cf08620ff8894b28fe11b7eb99809d6930870fbe48a281</SHA256>
+</FILE>
+
+<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.10.1.dev-noarch-1.txz">
+<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.10.1.dev/unraid-zip-manager-2025.07.10.1.dev-noarch-1.txz</URL>
+<SHA256>98e52a8ce67e15dcc360e780dd75ae066fc394f8d259096827231fdc6fe4ff3d</SHA256>
+</FILE>
+
+<!--
+The 'install' script.
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.10.1.dev-noarch-1.txz
+
+killall 7zzs >/dev/null 2>&1
+tar xvf /boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz -C /usr/bin/ 7zzs
+
+# cleanup old versions
+rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.07.10.1.dev')
+rm -f $(ls /boot/config/plugins/zip_manager/*.tar.xz 2>/dev/null | grep -v '7z2409-linux-x64.tar.xz')
+
+echo ""
+echo "----------------------------------------------------"
+echo " zip_manager has been installed."
+echo " Version: 2025.07.10.1.dev"
+echo "----------------------------------------------------"
+echo ""
+]]>
+</INLINE>
+</FILE>
+
+<!--
+The 'remove' script.
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+removepkg unraid-zip-manager
+
+killall 7zzs >/dev/null 2>&1
+rm -f /usr/bin/7zzs
+rm -rf /usr/local/emhttp/plugins/zip_manager
+rm -rf /boot/config/plugins/zip_manager
+]]>
+</INLINE>
+</FILE>
+
+</PLUGIN>
