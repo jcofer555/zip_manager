@@ -7,6 +7,7 @@ Markdown="false"
 ---
 
 <?php
+session_start();
 while (ob_get_level())
   ob_end_clean(); // Clear any existing buffers
 ob_implicit_flush(true); // Enable auto-flushing
@@ -143,16 +144,24 @@ function renderBreadcrumb($base, $current, $queryKey, $extra = [])
 $selectedFile = $_GET['file'] ?? $_POST['selected_file'] ?? '';
 $selectedDestRel = $_GET['dest'] ?? $_POST['destination'] ?? '';
 $selectedDestFull = $selectedDestRel ? $root . ltrim($selectedDestRel, '/') : '';
-$archivePassword = $_POST['extract_password'] ?? $_GET['extract_password'] ?? '';
+if (!isset($_SESSION['extract_password'])) {
+  $_SESSION['extract_password'] = '';
+}
+
+if (isset($_POST['extract_password'])) {
+  $_SESSION['extract_password'] = $_POST['extract_password'];
+}
+$archivePassword = $_SESSION['extract_password'];
 
 $showPasswordField = false;
-
 if (!empty($selectedFile) && file_exists($selectedFile)) {
   $ext = strtolower(pathinfo($selectedFile, PATHINFO_EXTENSION));
-  if (preg_match('/\.tar\.gz$/i', $selectedFile))
+  if (preg_match('/\.tar\.gz$/i', $selectedFile)) {
     $ext = 'tar.gz';
+  }
 
   if ($ext === '7z') {
+    // Always run the dummy scan to detect encryption
     $dummyPass = "-pWRONGPASS";
     exec("/usr/bin/7zzs l $dummyPass " . escapeshellarg($selectedFile) . " 2>&1", $listOutput);
     foreach ($listOutput as $line) {
@@ -166,6 +175,7 @@ if (!empty($selectedFile) && file_exists($selectedFile)) {
 
 // Clear logic
 if (isset($_POST['clear'])) {
+  unset($_SESSION['extract_password']);
   echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
   return;
 }
@@ -208,6 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
         $passArg = $password !== '' ? "-p" . escapeshellarg($password) : '';
 
         exec("/usr/bin/7zzs l -ba $passArg " . escapeshellarg($filePath) . " 2>&1", $output, $exitCode);
+		file_put_contents('/boot/config/plugins/zip_manager/logs/last_check_archive_output.log', implode("\n", $output));
 
         $outputText = implode("\n", $output);
         $previewFailed = false;
@@ -259,14 +270,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
             $extractionResult .= " - $conflict\n";
           }
           $extractionResult .= "\nPlease confirm to proceed with overwriting.</pre>";
-          $extractionResult .= '<form method="post">';
-          $extractionResult .= '<input type="hidden" name="selected_file" value="' . htmlspecialchars($filePath) . '">';
-          $extractionResult .= '<input type="hidden" name="destination" value="' . htmlspecialchars($destination) . '">';
-          $extractionResult .= '<input type="hidden" name="extract" value="1">';
-          $extractionResult .= '<input type="hidden" name="proceed" value="1">';
-          $extractionResult .= '<input type="hidden" name="extract_password" value="' . htmlspecialchars($archivePassword) . '">';
-          $extractionResult .= '<input type="submit" value="✅ Overwrite">';
-          $extractionResult .= '</form><hr>';
+ // Overwrite confirmation form
+    $extractionResult .= '<form method="post" style="display: inline-block; margin-right: 1em;">';
+    $extractionResult .= '<input type="hidden" name="selected_file" value="' . htmlspecialchars($filePath) . '">';
+    $extractionResult .= '<input type="hidden" name="destination" value="' . htmlspecialchars($destination) . '">';
+    $extractionResult .= '<input type="hidden" name="extract" value="1">';
+    $extractionResult .= '<input type="hidden" name="proceed" value="1">';
+    $extractionResult .= '<input type="hidden" name="extract_password" value="' . htmlspecialchars($archivePassword) . '">';
+    $extractionResult .= '<input type="submit" value="✅ Overwrite">';
+    $extractionResult .= '</form>';
+
+    // Cancel button
+    $extractionResult .= '<form method="post" style="display: inline-block;">';
+    $extractionResult .= '<input type="submit" name="clear" value="❌ Cancel">';
+    $extractionResult .= '</form><hr>';
         } else {
           // ✅ Show processing message before extraction
           echo '<div id="processing-message" style="color: orange; font-weight: bold;">⏳ Extracting archive, please wait...</div>';
@@ -282,8 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
           if ($resultCode === 0) {
             // Get list of extracted files from archive
             $extractedPaths = [];
-            exec("/usr/bin/7zzs l -ba " . escapeshellarg($filePath), $listOutput);
-            file_put_contents('/boot/config/plugins/zip_manager/logs/last_check_archive_output.log', implode("\n", $listOutput));
+            exec("/usr/bin/7zzs l -ba $passArg " . escapeshellarg($filePath) . " 2>&1", $listOutput);
 
             foreach ($listOutput as $line) {
               if (preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
@@ -295,39 +311,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_file'])) {
               }
             }
 
-            // Apply ownership and permissions
-            $logFile = '/boot/config/plugins/zip_manager/logs/last_extracted_owner_permission_change_output.log';
-            $timestamp = date('[Y-m-d H:i:s]');
-            $logEntry = "$timestamp Applying ownership and permissions:\n";
+// Apply ownership and permissions
+$logFile = '/boot/config/plugins/zip_manager/logs/last_extracted_owner_permission_change_output.log';
+$timestamp = date('[Y-m-d H:i:s]');
+$logEntry = "$timestamp Applying ownership and permissions:\n";
 
-            foreach ($extractedPaths as $path) {
-              if (!file_exists($path)) {
-                $logEntry .= "Skipped (not found): $path\n";
-                continue;
-              }
+foreach ($extractedPaths as $originalPath) {
+    $path = realpath($originalPath);
 
-              $escaped = escapeshellarg($path);
+    if ($path === false || !file_exists($path)) {
+        $logEntry .= "Skipped (not found): $originalPath\n";
+        continue;
+    }
 
-              if (is_dir($path)) {
-                $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
-                $chmodOutput = shell_exec("chmod -v 755 $escaped 2>&1");
-                $logEntry .= "Directory: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
-              } elseif (is_file($path)) {
-                $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
-                $chmodOutput = shell_exec("chmod -v 644 $escaped 2>&1");
-                $logEntry .= "File: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
-              } else {
-                $logEntry .= "Unknown type (skipped): $path\n";
-              }
-            }
+    $escaped = escapeshellarg($path);
 
-            // Overwrite the log file with the latest run
-            file_put_contents($logFile, $logEntry);
+    if (is_dir($path)) {
+        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+        $chmodOutput = shell_exec("chmod -v 755 $escaped 2>&1");
+        $logEntry .= "Directory: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+    } elseif (is_file($path)) {
+        $chownOutput = shell_exec("chown -v nobody:users $escaped 2>&1");
+        $chmodOutput = shell_exec("chmod -v 644 $escaped 2>&1");
+        $logEntry .= "File: $path\nchown output:\n$chownOutput\nchmod output:\n$chmodOutput\n\n";
+    } else {
+        $logEntry .= "Unknown type (skipped): $path\n";
+    }
+}
+
+file_put_contents($logFile, $logEntry);
           }
 
           if ($resultCode === 0) {
             logExtraction($filePath, $destination, '✅ Success');
             $extractionResult = "<p style='color: green; font-size: 1.2em;'>✅ Extraction Successful</p>";
+			unset($_SESSION['extract_password']);
             $selectedFile = '';
             $selectedDestFull = '';
             $selectedDestRel = '';
@@ -667,7 +685,7 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
     <label>Destination folder:</label>
     <div style="position: relative; display: inline-block;">
       <input type="text" name="destination_display" readonly value="<?= htmlspecialchars($selectedDestFull) ?>"
-        onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>&extract_password=<?= urlencode($archivePassword) ?>'"
+        onclick="window.location='?destpicker=1&browse_dest=<?= urlencode($destRelPath) ?>&file=<?= urlencode($selectedFile) ?>&dest=<?= urlencode($selectedDestRel) ?>'"
         style="width: 300px; padding-right: 1em;">
       <?php if (empty($selectedDestFull)): ?>
         <span style="
@@ -868,14 +886,12 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
 
         $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
           '&file=' . urlencode($selectedFile) .
-          '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
-          '&extract_password=' . urlencode($archivePassword);
+          '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/'));
 
         $browseRel = trim(str_replace($root, '', $path), '/');
         $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
           '&file=' . urlencode($selectedFile) .
-          '&dest=' . urlencode($selectedDestRel) .
-          '&extract_password=' . urlencode($archivePassword);
+          '&dest=' . urlencode($selectedDestRel);
 
         echo '<div style="display:flex; align-items:center; gap:0.5em;">';
         echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
@@ -898,7 +914,7 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
 // Read the last 5 lines
 $historyLines = file_exists($logFile) ? array_slice(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -10) : [];
 
-echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Extraction History logged at /boot/config/plugins/zip_manager/extract_history.log</strong></summary>';
+echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Extraction History</strong></summary>';
 echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
 echo $historyLines ? htmlspecialchars(implode("\n", $historyLines)) : "No extractions yet";
 echo "</div></details>";
