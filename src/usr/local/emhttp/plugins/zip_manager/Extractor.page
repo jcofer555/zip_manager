@@ -488,7 +488,7 @@ $archiverUrl = "/Tools/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csr
     </form>
 
     <!-- Support Forum -->
-    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank"
+    <form action="https://forums.unraid.net/topic/191678-zip-manager-for-unraid/" method="get" target="_blank"
       style="margin: 0;">
       <input type="submit" value="❓ Support Forum" style="margin-top: 0.1em;">
     </form>

@@ -3,7 +3,7 @@
     "package_name": "unraid-zip-manager",
     "author": "jcofer555",
     "icon": "icon.png",
-    "support": "https://forums.unraid.net/topic/191678-7-zip-for-unraid/",
+    "support": "https://forums.unraid.net/topic/191678-zip-manager-for-unraid/",
     "min": "7.0.0",
     "launch": "Settings/Extractor",
     "zip_file": "7z2409-linux-x64.tar.xz",
