@@ -33,20 +33,24 @@ if (!is_dir($logDir)) {
   flex: 1;
   padding: 6px;
   border-radius: 4px;
-  background-color: #1d1d1d;
+  background-color: #111111;
   color: orange;
   cursor: pointer;
 }
 
 #pickerModal {
-  width: 440px;
+  display: none;
+  background: #111111;
+  border: 1px solid orange;
+  padding: 12px;
+  color: orange;
+  font-family: monospace;
+  font-size: 16px;
+  max-width: 448px;
   max-height: 200px;
   overflow-y: auto;
-  background: #fafafa;
-  border: 1px solid #ccc;
-  padding: 15px;
-  z-index: 1000;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  box-shadow: none;
+  position: relative;
 }
 
 #breadcrumb {
@@ -70,20 +74,25 @@ if (!is_dir($logDir)) {
 }
 
 #fileList {
-  margin: 0;
-  padding: 0;
+  padding-left: 18px;
   list-style: none;
+  margin: 0;
+  color: orange;
 }
 
 #fileList li {
   display: block;
-  margin: 2px 0;
+  margin: 4px 0;
+  font-family: monospace;
+  font-size: 16px;
 }
 
 #fileList span {
   color: orange;
   padding: 4px 8px;
   cursor: pointer;
+  font-family: monospace;
+  font-size: 16px;
 }
 
 #fileList span:hover {
@@ -133,11 +142,10 @@ if (!is_dir($logDir)) {
   color: gray;
   font-size: 0.85em;
   margin-top: 8px;
-  opacity: 0.5;
-  height: 20px;           /* fixed height */
-  line-height: 20px;      /* vertically center text */
-  box-sizing: border-box; /* include padding/borders in height */
-  overflow: hidden;       /* hide overflow if any */
+  opacity: 0.6;
+  height: 20px;
+  line-height: 20px;
+  box-sizing: border-box;
 }
 
 #passwordRow {
@@ -155,10 +163,10 @@ if (!is_dir($logDir)) {
 
 #statusBox {
   display: inline-block;         /* limit width to content */
-  padding: 6px 12px;
+  padding: 0px 0px;
   border-radius: 6px;
   color: orange;
-  margin-top: 12px;
+  margin-top: 0px;
   font-weight: bold;
   max-width: 90%;                /* prevent overflow */
   word-wrap: break-word;
@@ -170,6 +178,41 @@ if (!is_dir($logDir)) {
 
 #statusBox:empty {
   display: none;
+}
+
+body {
+  background-color: #111111;
+}
+
+#listOutput {
+  display: none;
+  margin-top: 12px;
+  background: #111111;
+  border: 1px solid orange;
+  font-size: 16px;
+  padding: 12px;
+  color: orange;
+  max-width: 448px;
+  font-family: monospace;
+  overflow-y: auto;
+  max-height: 200px;
+}
+
+.highlight-input {
+  background-color: #111111;
+  color: orange;
+  border: 1px solid orange;
+  padding: 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  transition: background-color 0.2s ease;
+}
+
+.highlight-input:focus {
+  background-color: #2a2a2a;
+  outline: none; /* removes browser default blue border */
+  box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4); /* orange glow */
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 </style>
 
@@ -219,7 +262,7 @@ $archiverUrl = "/Settings/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($
 
       // Files to redact + copy
       $logFiles = [
-        'archiver_debub.log',
+        'archiver_debug.log',
         'extractor_debug.log',
       ];
 
@@ -231,6 +274,54 @@ $archiverUrl = "/Settings/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($
           continue;
 
         $content = file_get_contents($src);
+
+if ($filename === 'archiver_debug.log') {
+  $excludedPaths = ['/usr/bin/7zzs'];
+  $lines = explode("\n", $content);
+  $redactedLines = [];
+
+  foreach ($lines as $line) {
+    $srcAssigned = false;
+    $destAssigned = false;
+
+    $line = preg_replace('/^- (.+)$/', '- [REDACTED_NAME]', $line);
+    $line = preg_replace('#^(✅ chown succeeded: )(.+?) ->#', '$1[SRC] ->', $line);
+    $line = preg_replace('#^(✅ chmod applied: )(.+?) ->#', '$1[SRC] ->', $line);
+
+    // 🔐 Mask -p'password' or -p"password" or -p123
+    $line = preg_replace("/-p(['\"]?)[^'\"]+\\1/", "-p'[REDACTED]'", $line);
+
+    // 🔒 Mask /mnt/... paths as [SRC] and [DEST]
+    $line = preg_replace_callback(
+      '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+      function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+        $path = $match[1];
+
+        // Skip excluded paths
+        foreach ($excludedPaths as $excluded) {
+          if (strpos($path, $excluded) === 0) {
+            return $match[0]; // leave unchanged
+          }
+        }
+
+        if (!$srcAssigned) {
+          $srcAssigned = true;
+          return '[SRC]';
+        } elseif (!$destAssigned) {
+          $destAssigned = true;
+          return '[DEST]';
+        } else {
+          return '[REDACTED]';
+        }
+      },
+      $line
+    );
+
+    $redactedLines[] = $line;
+  }
+
+  $content = implode("\n", $redactedLines);
+}
 
 if ($filename === 'extractor_debug.log') {
   $excludedPaths = ['/usr/bin/7zzs'];
@@ -329,13 +420,12 @@ if ($filename === 'extractor_debug.log') {
 <div>
   <div class="field-row">
     <label for="inputFile">Archive File:</label>
-    <input
-  type="text" id="inputFile" placeholder="Click to browse" readonly onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
+    <input type="text" id="inputFile" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Click to browse" readonly onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
   </div>
 
 <div class="field-row" id="passwordRow">
   <label for="archivePassword">Password:</label>
-  <input type="password" id="archivePassword" placeholder="Required for encrypted archives" />
+  <input type="password" id="archivePassword" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Required for encrypted archives" />
   <label style="color: orange; font-size: 0.9em; cursor: pointer;">
     <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
     Show
@@ -344,7 +434,7 @@ if ($filename === 'extractor_debug.log') {
 
   <div class="field-row">
     <label for="outputDir">Output Directory:</label>
-    <input type="text" id="outputDir" placeholder="Click to browse" readonly onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+    <input type="text" id="outputDir" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Click to browse" readonly onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
   </div>
 
   <button onclick="runExtraction()">🚀 Extract</button>
@@ -358,33 +448,29 @@ if ($filename === 'extractor_debug.log') {
 <div id="pickerModal" style="display:none;">
   <div id="breadcrumb"></div>
   <ul id="fileList"></ul>
-  <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.5; display: none;">
+  <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8; display: none;">
     * Double-click to select a folder
   </div>
 </div>
 
 <div id="listOutput" style="
   display: none;
-  white-space: pre;
-  color: lightgray;
-  background-color: #1d1d1d;
-  border: 1px solid #444;
-  padding: 10px;
   margin-top: 12px;
-  font-size: 16px;
-  font-family: monospace;
-  line-height: 1.5;
-  width: max-content;
-  min-width: 448px;     /* 👈 ensures minimum width */
-  max-width: 100%;      /* 👈 keeps it responsive */
-  overflow-x: auto;
+  background: #111111;
+  border: 1px solid orange;
+  padding: 12px;
+  max-height: 200px;
   overflow-y: auto;
-  max-height: 300px;
-"></div>
+  position: relative;
+  font-family: monospace;
+  font-size: 16px;
+  color: orange;
+">
+</div>
 
-<div id="overwriteModal" style="display: none; margin-top: 12px; background: #2a2a2a; border: 1px solid orange; padding: 12px; color: orange; max-width: 440px;">
-  <div id="overwriteHeader" style="font-weight: bold; margin-bottom: 8px;">⚠️ The following files may be overwritten:</div>
-  <ul id="overwriteList" style="max-height: 140px; overflow-y: auto; padding-left: 18px;"></ul>
+<div id="overwriteModal" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; font-size: 16px; padding: 12px; color: orange; max-width: 448px;">
+  <div id="overwriteHeader" style="font-weight: bold; margin-bottom: 8px; color: white;">⚠️ The following files may be overwritten:</div>
+  <ul id="overwriteList" style="max-height: 200px; list-style: none; overflow-y: auto; padding-left: 18px;"></ul>
   <div style="margin-top: 12px;">
     <button id="overwriteConfirm" style="margin-right: 8px;">✅ Continue</button>
     <button id="overwriteCancel">❌ Cancel</button>
@@ -404,7 +490,7 @@ if ($filename === 'extractor_debug.log') {
 <button onclick="clearExtractHistory()" style="margin-top: 8px;">🧹 Clear History</button>
 
 <!-- Clear History Modal -->
-<div id="clearHistoryModal" style="display:none; margin-top:12px; background:#2a2a2a; border:1px solid orange; padding:12px; color:orange; max-width:440px;">
+<div id="clearHistoryModal" style="display:none; margin-top:12px; background:#2a2a2a; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
   <div style="font-weight:bold; margin-bottom:8px;">⚠️ Clear extraction history?</div>
   <div>This will remove all previous extraction records. This cannot be undone.</div>
   <div style="margin-top:12px;">
@@ -487,30 +573,53 @@ function clearExtractHistory() {
 
 function listArchiveContents() {
   const input = document.getElementById("inputFile").value;
-  const password = document.getElementById('archivePassword').value;
+  const password = document.getElementById("archivePassword").value;
   const outputBox = document.getElementById("listOutput");
 
-  // ✅ Clear extract output
   document.getElementById("statusBox").innerText = "";
+  outputBox.innerHTML = "";
+  outputBox.style.display = "block";
 
   if (!input) {
-    outputBox.style.display = "block";
-    outputBox.innerText = "❌ Please select an archive file first.";
+    outputBox.innerHTML = "<div style='color: orange;'>❌ Please select an archive file first.</div>";
     return;
   }
 
-  outputBox.style.display = "block";
-  outputBox.innerText = "🔄 Listing archive contents...";
+  outputBox.innerHTML = "<div style='color: orange;'>🔄 Listing archive contents...</div>";
 
-fetch(`/plugins/zip_manager/helpers/list_archive_contents.php?input=${encodeURIComponent(input)}&password=${encodeURIComponent(password)}`)
-  .then(res => res.text())
-  .then(output => {
-    document.getElementById("listOutput").innerText = output;
-  })
+  fetch(`/plugins/zip_manager/helpers/list_archive_contents.php?input=${encodeURIComponent(input)}&password=${encodeURIComponent(password)}`)
+    .then(res => res.text())
+    .then(output => {
+      const lines = output.trim().split(/\r?\n/);
+
+let listHTML = `
+  <div style="font-weight: bold; margin-bottom: 8px; color: white;">
+    🗜️ Archive contents:
+  </div>
+  <ul style="padding-left: 18px; list-style: none; margin: 0; color: orange;">
+`;
+
+      lines.forEach(line => {
+        if (!line) return;
+
+        const segments = line.trim().split('/');
+        const lastSegment = segments[segments.length - 1];
+
+        const isNumericVersionFolder = /^[\d.]+$/.test(lastSegment);
+        const hasExtension = /\.[^\/]+$/.test(lastSegment);
+        const isLikelyFolder = !hasExtension || isNumericVersionFolder;
+
+        const icon = isLikelyFolder ? "📁" : "📄";
+        listHTML += `<li style="margin-bottom: 4px;">${icon} ${line}</li>`;
+      });
+
+      listHTML += "</ul>";
+      outputBox.innerHTML = listHTML;
+    })
     .catch(err => {
-    document.getElementById("listOutput").innerText = "❌ Error listing archive contents.";
-    console.error(err);
-  });
+      outputBox.innerHTML = "<div style='color: orange;'>❌ Error listing archive contents.</div>";
+      console.error(err);
+    });
 }
 
 function parentDirectory(path) {
@@ -853,22 +962,28 @@ function runExtraction() {
     .then(res => res.json())
     .then(data => {
       if (data.conflicts && data.conflicts.length > 0) {
-        // Conflicts found - show modal with list
+        // Conflicts found - show modal with styled list
         statusBox.innerText = "";
         list.innerHTML = "";
 
-        const displayLimit = 10;
-        data.conflicts.slice(0, displayLimit).forEach(name => {
+        data.conflicts.forEach(name => {
+          const segments = name.trim().split('/');
+          const lastSegment = segments[segments.length - 1];
+
+          const isNumericVersionFolder = /^[\d.]+$/.test(lastSegment);
+          const hasExtension = /\.[^\/]+$/.test(lastSegment);
+          const isLikelyFolder = !hasExtension || isNumericVersionFolder;
+
+          const icon = isLikelyFolder ? "📁" : "📄";
+
           const li = document.createElement("li");
-          li.textContent = name;
+          li.textContent = `${icon} ${name}`;
+          li.style.marginBottom = "4px";
+          li.style.color = "orange";
+          li.style.fontFamily = "monospace";
+          li.style.fontSize = "16px";
           list.appendChild(li);
         });
-
-        if (data.conflicts.length > displayLimit) {
-          const li = document.createElement("li");
-          li.textContent = `...and ${data.conflicts.length - displayLimit} more`;
-          list.appendChild(li);
-        }
 
         modal.style.display = "block";
 
@@ -878,12 +993,12 @@ function runExtraction() {
           statusBox.innerText = "⏳ Extraction in progress...";
           fetch(extractEndpoint)
             .then(res => res.text())
-.then(msg => {
-  statusBox.innerText = msg;
-  extractButton.disabled = false;
-  document.getElementById("archivePassword").value = ""; // 👈 Clears password
-  loadExtractHistory();
-})
+            .then(msg => {
+              statusBox.innerText = msg;
+              extractButton.disabled = false;
+              document.getElementById("archivePassword").value = "";
+              loadExtractHistory();
+            })
             .catch(err => {
               console.error("Extraction error:", err);
               statusBox.innerText = "❌ Extraction failed.";
@@ -901,14 +1016,14 @@ function runExtraction() {
       } else {
         // No conflicts - extract immediately
         statusBox.innerText = "⏳ Extraction in progress...";
-        return fetch(extractEndpoint)
+        fetch(extractEndpoint)
           .then(res => res.text())
-.then(msg => {
-  statusBox.innerText = msg;
-  extractButton.disabled = false;
-  document.getElementById("archivePassword").value = ""; // 👈 Clears password
-  loadExtractHistory();
-})
+          .then(msg => {
+            statusBox.innerText = msg;
+            extractButton.disabled = false;
+            document.getElementById("archivePassword").value = "";
+            loadExtractHistory();
+          })
           .catch(err => {
             console.error("Extraction error:", err);
             statusBox.innerText = "❌ Extraction failed.";
@@ -923,18 +1038,17 @@ function runExtraction() {
     });
 }
 
-// Automatically pulse #statusBox on any content change
+// Auto-pulse #statusBox when content updates
 const statusBox = document.getElementById("statusBox");
 const observer = new MutationObserver(() => {
   statusBox.classList.remove("animate-pulse");
-  void statusBox.offsetWidth; // Force reflow
+  void statusBox.offsetWidth;
   statusBox.classList.add("animate-pulse");
 });
-
 observer.observe(statusBox, { childList: true, characterData: true, subtree: true });
 
 function loadExtractHistory() {
-  fetch("/plugins/zip_manager/helpers/get_history.php")
+  fetch("/plugins/zip_manager/helpers/get_extract_history.php")
     .then(res => res.text())
     .then(data => {
       document.getElementById("extractLogBox").innerText = data;
