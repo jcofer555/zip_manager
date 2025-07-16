@@ -13,6 +13,6 @@ Easily compress and extract a wide variety of archive formats directly from the 
 
 Perfect for managing archive files directly on your Unraid server.
 
-![image thumb png c11c43e93530ba47e14289eb2f4da78b](https://github.com/user-attachments/assets/e529cdc1-b936-4671-bb12-ca7b77264159)
+<img width="1913" height="758" alt="image" src="https://github.com/user-attachments/assets/7ba9da3d-1586-46f4-8441-2b07928ca849" />
 
-![image thumb png 730f53968e34022266d6465db9f4e8ed](https://github.com/user-attachments/assets/7b3d4872-24fd-4e5b-98c5-ed9621176844)
+<img width="1911" height="742" alt="image" src="https://github.com/user-attachments/assets/71423311-7c37-4931-ba62-fa9ae801f5aa" />
