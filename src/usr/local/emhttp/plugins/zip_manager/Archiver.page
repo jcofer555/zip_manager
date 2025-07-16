@@ -5,384 +5,265 @@ Icon="zip.png"
 Tag="zip.png"
 Markdown="false"
 ---
-
 <?php
 $logDir = '/boot/config/plugins/zip_manager/logs';
 
 if (!is_dir($logDir)) {
-    mkdir($logDir, 0755, true);
-}
-$logFile = '/boot/config/plugins/zip_manager/logs/last_archived_output.log';
-$archiveLogFile = '/boot/config/plugins/zip_manager/logs/archive_history.log';
-define('MAX_ARCHIVE_SIZE', 500 * 1024 * 1024); // 500 MB
-$root = '/mnt/';
-$archiveResult = '';
-$archiveName = $_GET['name'] ?? ($_POST['zip_name'] ?? 'archive');
-$archivePassword = $_POST['zip_password'] ?? ($_GET['password'] ?? '');
-
-// Helper to format file sizes
-function formatBytes($bytes, $precision = 1)
-{
-  $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  $bytes = max($bytes, 0);
-  $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-  $pow = min($pow, count($units) - 1);
-  return round($bytes / pow(1024, $pow), $precision) . ' ' . $units[$pow];
-}
-
-function getBestTempLocation($base = '/mnt')
-{
-  $bestPath = '/tmp'; // fallback
-  $maxFree = 0;
-
-  foreach (glob("$base/*") as $mount) {
-    if (is_dir($mount) && is_writable($mount)) {
-      $free = @disk_free_space($mount);
-      if ($free !== false && $free > $maxFree) {
-        $maxFree = $free;
-        $bestPath = $mount;
-      }
-    }
-  }
-
-  return $bestPath;
-}
-
-function logArchiveAction($sources, $destination, $name, $format, $status)
-{
-  global $archiveLogFile;
-  $archiveLogFile = '/boot/config/plugins/zip_manager/logs/archive_history.log';
-  $timestamp = date('Y-m-d H:i:s');
-  $user = posix_getpwuid(posix_geteuid())['name'] ?? 'unknown';
-  $entry = "[$timestamp] $status: " . implode(', ', $sources) . " → $destination/$name.$format\n";
-  file_put_contents($archiveLogFile, $entry, FILE_APPEND | LOCK_EX);
-
-  // Keep only last 5 entries
-  $lines = file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-  $lastFive = array_slice($lines, -10);
-  file_put_contents($archiveLogFile, implode("\n", $lastFive) . "\n", LOCK_EX);
-}
-
-function renderBreadcrumb($base, $current, $queryKey, $extra = [])
-{
-  $rel = trim(str_replace($base, '', $current), '/');
-  $parts = $rel === '' ? [] : explode('/', $rel);
-  $breadcrumbs = [];
-
-  // Root label /mnt (clickable)
-  $query = array_merge([$queryKey => ''], $extra);
-  $breadcrumbs[] = '<a href="?' . http_build_query($query) . '">/mnt</a>';
-
-  $path = '';
-  foreach ($parts as $part) {
-    $path .= '/' . $part;
-    $query = array_merge([$queryKey => ltrim($path, '/')], $extra);
-    $breadcrumbs[] = '<a href="?' . http_build_query($query) . '">' . htmlspecialchars($part) . '</a>';
-  }
-
-  return '<div class="current-dir-container"><strong class="current-dir-label">Current Directory:</strong>'
-    . '<span class="breadcrumb">' . implode(' <span class="breadcrumb-sep">-></span> ', $breadcrumbs) . '</span></div>';
-}
-
-$isSourcePicker = isset($_GET['sourcepicker']);
-$isDestPicker = isset($_GET['destpicker']);
-
-$sourcePath = $root;
-$sourceRelPath = '';
-$destPath = $root;
-$destRelPath = '';
-
-if ($isSourcePicker) {
-  $browse = $_GET['browse_sources'] ?? '';
-  $sourcePath = realpath($root . $browse) ?: $root;
-  if (strpos($sourcePath, $root) !== 0 || !is_dir($sourcePath))
-    $sourcePath = $root;
-  $sourceRelPath = trim(str_replace($root, '', $sourcePath), '/');
-}
-
-if ($isDestPicker) {
-  $browse = $_GET['browse_dest'] ?? '';
-  $destPath = realpath($root . $browse) ?: $root;
-  if (strpos($destPath, $root) !== 0 || !is_dir($destPath))
-    $destPath = $root;
-  $destRelPath = trim(str_replace($root, '', $destPath), '/');
-}
-
-$format = $_SERVER['REQUEST_METHOD'] === 'POST'
-  ? ($_POST['zip_format'] ?? '7z')
-  : ($_GET['format'] ?? '7z');
-
-$zipSources = array_filter(array_map('trim', explode(',', $_GET['sources'] ?? $_POST['zip_sources'] ?? '')));
-$zipSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', $p), $zipSources));
-$zipDestRel = $_GET['dest'] ?? '';
-$zipDestFull = $zipDestRel ? preg_replace('#/+#', '/', $root . ltrim($zipDestRel, '/')) : '';
-
-function getDirectorySize($path)
-{
-  $size = 0;
-  if (is_file($path))
-    return filesize($path);
-  if (!is_dir($path))
-    return 0;
-
-  $iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
-  );
-
-  foreach ($iterator as $file) {
-    if ($file->isFile())
-      $size += $file->getSize();
-  }
-
-  return $size;
-}
-
-$totalSelectedSize = 0;
-foreach ($zipSources as $src) {
-  $realSrc = realpath($src);
-  if ($realSrc)
-    $totalSelectedSize += getDirectorySize($realSrc);
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  if (isset($_POST['clear'])) {
-    echo '<script>window.location.href = "' . strtok($_SERVER["REQUEST_URI"], '?') . '";</script>';
-    return;
-  }
-
-  if (isset($_POST['create'])) {
-    if ($totalSelectedSize > MAX_ARCHIVE_SIZE) {
-      $archiveResult = "<style='color:red; font-weight:bold;'>❌ Total selected size (" . formatBytes($totalSelectedSize) . ") exceeds the limit of " . formatBytes(MAX_ARCHIVE_SIZE) . "<hr>";
-    } else {
-
-      $sources = $zipSources;
-      $dest = trim($_POST['zip_output_base'] ?? '');
-      $name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $_POST['zip_name'] ?? 'archive');
-      $format = $_POST['zip_format'] ?? 'zip';
-      $outputPath = $dest ? rtrim($dest, '/') . '/' . $name . '.' . ($format === 'tar.gz' ? 'tar.gz' : $format) : '';
-	  // 🔐 Handle optional password
-$password = trim($_POST['zip_password'] ?? '');
-$supportsPassword = in_array($format, ['zip', '7z']);
-$useHeaderEncryption = ($format === '7z'); // Only for .7z
-
-$passArg = ($password !== '' && $supportsPassword)
-  ? "-p" . escapeshellarg($password) . ($useHeaderEncryption ? " -mhe=on" : "")
-  : '';
-
-      if (!$outputPath || empty($sources)) {
-        $archiveResult = "<pre>❌ Please provide both source paths and a destination folder.</pre><hr>";
-} elseif (file_exists($outputPath) && !isset($_POST['proceed'])) {
-  $archiveResult = "<pre>⚠️ Archive already exists:\n\n$outputPath\n\nPlease confirm to overwrite.</pre>";
-
-  // ✅ Preserve password for overwrite form
-  $preservedPassword = htmlspecialchars($password ?? '');
-
-  $archiveResult .= '<form method="post" style="display: inline-block; margin-right: 1em;">';
-  $archiveResult .= '<input type="hidden" name="zip_sources" value="' . htmlspecialchars(implode(',', $sources)) . '">';
-  $archiveResult .= '<input type="hidden" name="zip_output_base" value="' . htmlspecialchars($dest) . '">';
-  $archiveResult .= '<input type="hidden" name="zip_name" value="' . htmlspecialchars($name) . '">';
-  $archiveResult .= '<input type="hidden" name="zip_format" value="' . htmlspecialchars($format) . '">';
-  $archiveResult .= '<input type="hidden" name="zip_password" value="' . $preservedPassword . '">';
-  $archiveResult .= '<input type="hidden" name="proceed" value="1">';
-  $archiveResult .= '<input type="submit" name="create" value="✅ Overwrite">';
-  $archiveResult .= '</form>';
-  // Cancel button
-  $archiveResult .= '<form method="post" style="display: inline-block;">';
-  $archiveResult .= '<input type="submit" name="clear" value="❌ Cancel">';
-  $archiveResult .= '</form><hr>';
-      } else {
-        $escapedSources = array_map('escapeshellarg', $sources);
-
-        if ($format === 'tar.gz') {
-          $tempDir = getBestTempLocation();
-          $tempTar = $tempDir . '/archive_temp.tar';
-
-          $cmd1 = "/usr/bin/7zzs a -ttar $tempTar " . implode(' ', $escapedSources);
-          $cmd2 = "/usr/bin/7zzs a -tgzip " . escapeshellarg($outputPath) . " " . escapeshellarg($tempTar);
-
-          exec($cmd1, $out1, $code1);
-          exec($cmd2, $out2, $code2);
-		  
-		  file_put_contents("/boot/config/plugins/zip_manager/logs/last_archived_output.log", "TAR output:\n" . implode("\n", $out1) . "\n\nGZIP output:\n" . implode("\n", $out2));
-
-          if (file_exists($tempTar)) {
-            unlink($tempTar);
-          }
-
-          $zipOutput = array_merge($out1, $out2);
-          $zipCode = max($code1, $code2);
-
-          if ($zipCode > 1 && file_exists($outputPath)) {
-            unlink($outputPath); // clean up failed archive
-          }
-        } else {
-			if (isset($_POST['proceed']) && file_exists($outputPath)) {
-  unlink($outputPath); // force clean overwrite
-}
-          $cmd = "/usr/bin/7zzs a $passArg " . escapeshellarg($outputPath) . " " . implode(' ', $escapedSources);
-          exec($cmd, $zipOutput, $zipCode);
-		  file_put_contents(
-			"/boot/config/plugins/zip_manager/logs/last_archived_output.log",
-			"Command: $cmd\nExit Code: $zipCode\n\n" . implode("\n", $zipOutput)
-			);
-        }
-
-if ($zipCode <= 1 && file_exists($outputPath)) {
-    $logFile = '/boot/config/plugins/zip_manager/logs/last_archived_owner_permission_change_output.log';
-    $timestamp = date('[Y-m-d H:i:s]');
-
-    // Run commands with verbose output
-    $chownOutput = shell_exec("chown -v nobody:users " . escapeshellarg($outputPath) . " 2>&1");
-    $chmodOutput = shell_exec("chmod -v 644 " . escapeshellarg($outputPath) . " 2>&1");
-
-    // Format and write to log
-    $logEntry = <<<LOG
-$timestamp Executing file permission changes:
-Command: chown -v nobody:users {$outputPath}
-Output:
-$chownOutput
-
-Command: chmod -v 644 {$outputPath}
-Output:
-$chmodOutput
-
-LOG;
-
-    file_put_contents($logFile, $logEntry);
-}
-
-        $status = ($zipCode <= 1 && file_exists($outputPath)) ? '✅ Success' : "❌ Failed (code $zipCode)";
-        logArchiveAction($sources, $dest, $name, $format, $status);
-        if ($zipCode <= 1 && file_exists($outputPath)) {
-          $archiveResult .= "<p style='color: green; font-weight: bold; font-size: 1.2em;'>✅ Archive Created</p>";
-
-          // 🧼 Clear selected sources, size, and destination
-          $zipSources = [];
-          $totalSelectedSize = 0;
-          $zipDestFull = '';
-          $zipDestRel = '';
-		  $archivePassword = '';
-
-        } else {
-          $archiveResult .= "<p style='color: red; font-weight: bold; font-size: 1.2em;'>❌ Archive creation failed (code $zipCode)</p>";
-        }
-      }
-    }
-  }
+  mkdir($logDir, 0755, true);
 }
 ?>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <style>
-  body {
-    font-family: sans-serif;
-    margin: 2em;
-  }
+.field-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
 
-  .form-row {
-    display: flex;
-    align-items: flex-start;
-    margin-top: 1em;
-  }
+.field-row label {
+  width: 160px;
+  font-weight: bold;
+  color: white;
+}
 
-  .form-row label {
-    width: 180px;
-    font-weight: bold;
-    padding-top: 6px;
-  }
+.field-row input {
+  max-width: 300px;
+  flex: 1;
+  padding: 6px;
+  border-radius: 4px;
+  background-color: #111111;
+  color: orange;
+  cursor: pointer;
+}
 
-  .form-row input[type="text"],
-  .form-row select {
-    flex: 1;
-    padding: 6px;
-    cursor: pointer;
-  }
+#pickerModal {
+  display: none;
+  position: relative;
+  background: #111111;
+  border: 1px solid orange;
+  padding: 12px;
+  color: orange;
+  font-family: monospace;
+  font-size: 16px;
+  width: 448px;
+  max-height: 220px;
+  overflow-y: auto;
+}
 
-  .folder-list {
-    margin-top: 1em;
-    padding-left: 1em;
-    border-left: 2px solid #ccc;
-    max-height: 300px;
-    overflow-y: auto;
-    background: #fff;
-  }
+#breadcrumb {
+  margin-bottom: 10px;
+  color: orange;
+  font-family: monospace;
+  user-select: none;
+}
 
-  .folder-list a {
-    text-decoration: none;
-    color: orange;
-    background: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    display: block;
-    margin: 4px 0;
-  }
+#breadcrumb span {
+  cursor: pointer;
+  text-decoration: underline;
+  margin-right: 5px;
+}
 
-  .folder-list a:hover {
-    background: #ffe5cc;
-  }
+#breadcrumb span.separator {
+  cursor: default;
+  text-decoration: none;
+  margin-right: 5px;
+  color: gray;
+}
 
-  .file-entry {
-    color: green;
-  }
+#fileList {
+  padding-left: 18px;
+  list-style: none;
+  margin: 0;
+  color: orange;
+}
 
-  .folder-list input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: orange;
-  }
+#fileList li {
+  display: block;
+  margin: 4px 0;
+  font-family: monospace;
+  font-size: 16px;
+}
 
-  .current-dir-container {
-    margin-bottom: 0.5em;
-    font-size: 1em;
-    color: #444;
-  }
+#fileList span {
+  color: orange;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 16px;
+}
 
-  .current-dir-container strong {
-    margin-right: 0.5em;
-  }
+#fileList span:hover {
+  text-decoration: underline;
+}
 
-  .breadcrumb {
-    color: #333;
-    white-space: nowrap;
-  }
+#breadcrumb {
+  color: green;
+  user-select: none;
+  margin-bottom: 8px;
+  font-family: monospace; /* optional */
+  white-space: nowrap; /* keep breadcrumb on one line */
+}
 
-  .breadcrumb a {
-    color: orange;
-    text-decoration: none;
-    display: inline;
-  }
+#breadcrumb span {
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  transition: color 0.2s ease;
+  display: inline-block;
+}
 
-  .breadcrumb a:hover {
-    color: red;
-    text-decoration: underline;
-  }
+#breadcrumb span:hover:not(.separator) {
+  color: red;
+}
 
-  .current-dir-label {
-    color: orange;
-    margin-right: 0.5em;
-  }
+#breadcrumb .separator {
+  cursor: default;
+  padding: 0 1px;
+  margin: 0;
+  color: orange;
+  user-select: none;
+  pointer-events: none;
+}
 
-  .breadcrumb-sep {
-    color: orange;
-  }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.shake {
+  animation: shake 0.5s;
+}
+
+#pickerMessage {
+  color: gray;
+  font-size: 0.85em;
+  margin-top: 8px;
+  opacity: 0.6;
+  height: 20px;
+  line-height: 20px;
+  box-sizing: border-box;
+}
+
+@keyframes statusPulse {
+  0%   { background-color: #2a2a2a; }
+  20%  { background-color: #3a3a3a; }
+  40%  { background-color: #444; }
+  60%  { background-color: #3a3a3a; }
+  80%  { background-color: #2f2f2f; }
+  100% { background-color: #2a2a2a; }
+}
+
+#statusBox {
+  display: inline-block;         /* limit width to content */
+  padding: 0px 0px;
+  border-radius: 6px;
+  color: orange;
+  margin-top: 0px;
+  font-weight: bold;
+  max-width: 90%;                /* prevent overflow */
+  word-wrap: break-word;
+}
+
+#statusBox.animate-pulse {
+  animation: statusPulse 1s ease;
+}
+
+#statusBox:empty {
+  display: none;
+}
+
+body {
+  background-color: #111111;
+}
+
+.highlight-input {
+  background-color: #111111;
+  color: orange;
+  border: 1px solid orange;
+  padding: 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  transition: background-color 0.2s ease;
+}
+
+.highlight-input:focus {
+  background-color: #2a2a2a;
+  outline: none; /* removes browser default blue border */
+  box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4); /* orange glow */
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.format-dropdown {
+  background-color: #111111;
+  color: orange;
+  font-family: monospace;
+  font-size: 16px;
+  padding: 6px;
+  width: 75px !important;
+  min-width: 0 !important;
+  max-width: 75px !important;
+  appearance: none; /* removes default arrow */
+  cursor: pointer;
+}
+
+/* Optional: add a custom arrow */
+.format-dropdown::after {
+  content: "▾";
+  pointer-events: none;
+}
+
+/* Style the dropdown options */
+.format-dropdown option {
+  color: orange;
+  background-color: #111111;
+}
+
+.input-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+#fileCountDisplay {
+  position: absolute;
+  top: 50%;
+  left: 100%; /* anchor to the right of the input field */
+  transform: translateY(-50%);
+  width: 275px; /* fixed width to prevent shifting */
+  font-family: monospace;
+  color: orange;
+  font-size: 16px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>
 
 <?php
 // Dynamically generate the Archiver page URL with CSRF token
 $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
-$archiverUrl = "/Tools/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
+$extractorUrl = "/Settings/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.1em;">
-  <h2 style="margin: 0;">Create archive using 7-zip</h2>
+<div style="display: flex; justify-content: end; align-items: flex-start; margin-bottom: 0.1em;">
 
   <!-- Button container -->
   <div style="display: flex; flex-direction: row; gap: 0.5em; align-items: flex-start; margin-left: 1em;">
     <!-- Extractor Page -->
-    <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
+    <form action="<?= htmlspecialchars($extractorUrl) ?>" method="get" style="margin: 0;">
       <input type="submit" value="📤 Extractor Page" style="margin-top: 0.1em;">
     </form>
 
     <!-- Support Forum -->
-    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank" style="margin: 0;">
+    <form action="https://forums.unraid.net/topic/191678-7-zip-for-unraid/" method="get" target="_blank"
+      style="margin: 0;">
       <input type="submit" value="❓ Support Forum" style="margin-top: 0.1em;">
     </form>
 
@@ -395,610 +276,876 @@ $archiverUrl = "/Tools/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode($cs
 
 <div style="display: flex;">
   <div style="margin-left: auto; width: 240px;">
-<?php
-if (isset($_POST['generate_diagnostics'])) {
-  $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
-  $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
-  $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
+    <?php
+    if (isset($_POST['generate_diagnostics'])) {
+      $diagFolder = '/boot/config/plugins/zip_manager/zip_manager_diagnostics';
+      $diagZip = '/boot/config/plugins/zip_manager/zip_manager_diagnostics.zip';
+      $debugLog = '/boot/config/plugins/zip_manager/logs/zip_manager_diagnostic_debug.log';
 
-  // Cleanup previous
-  @exec("rm -rf " . escapeshellarg($diagFolder));
-  @unlink($diagZip);
-  @unlink($debugLog);
+      // Cleanup previous
+      @exec("rm -rf " . escapeshellarg($diagFolder));
+      @unlink($diagZip);
+      @unlink($debugLog);
 
-  mkdir($diagFolder, 0755, true);
+      mkdir($diagFolder, 0755, true);
 
-  // Files to redact + copy
-  $logFiles = [
-    'archive_history.log',
-    'extract_history.log',
-    'last_archived_output.log',
-    'last_extracted_output.log',
-    'last_check_archive_output.log',
-	'last_archived_owner_permission_change_output.log',
-	'last_extracted_owner_permission_change_output.log',
-  ];
+      // Files to redact + copy
+      $logFiles = [
+        'archiver_debug.log',
+        'extractor_debug.log',
+      ];
 
-  foreach ($logFiles as $filename) {
-    $src = "/boot/config/plugins/zip_manager/logs/$filename";
-    $dest = "$diagFolder/$filename";
+      foreach ($logFiles as $filename) {
+        $src = "/boot/config/plugins/zip_manager/logs/$filename";
+        $dest = "$diagFolder/$filename";
 
-    if (!file_exists($src)) continue;
+        if (!file_exists($src))
+          continue;
 
-    $content = file_get_contents($src);
+        $content = file_get_contents($src);
 
-    // 🔒 Redact full paths
-$excludedPaths = ['/usr/bin/7zzs'];
-$lines = explode("\n", $content);
-$redactedLines = [];
+if ($filename === 'archiver_debug.log') {
+  $excludedPaths = ['/usr/bin/7zzs'];
+  $lines = explode("\n", $content);
+  $redactedLines = [];
 
-foreach ($lines as $line) {
+  foreach ($lines as $line) {
     $srcAssigned = false;
     $destAssigned = false;
 
+    $line = preg_replace('/^- (.+)$/', '- [REDACTED_NAME]', $line);
+    $line = preg_replace('#^(✅ chown succeeded: )(.+?) ->#', '$1[SRC] ->', $line);
+    $line = preg_replace('#^(✅ chmod applied: )(.+?) ->#', '$1[SRC] ->', $line);
+
+    // 🔐 Mask -p'password' or -p"password" or -p123
+    $line = preg_replace("/-p(['\"]?)[^'\"]+\\1/", "-p'[REDACTED]'", $line);
+
+    // 🔒 Mask /mnt/... paths as [SRC] and [DEST]
     $line = preg_replace_callback(
-        '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
-        function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
-            $path = $match[1];
+      '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+      function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+        $path = $match[1];
 
-            // Skip excluded paths
-            foreach ($excludedPaths as $excluded) {
-                if (strpos($path, $excluded) === 0) {
-                    return $match[0]; // leave unchanged
-                }
-            }
+        // Skip excluded paths
+        foreach ($excludedPaths as $excluded) {
+          if (strpos($path, $excluded) === 0) {
+            return $match[0]; // leave unchanged
+          }
+        }
 
-            if (!$srcAssigned) {
-                $srcAssigned = true;
-                return '[SRC]';
-            } elseif (!$destAssigned) {
-                $destAssigned = true;
-                return '[DEST]';
-            } else {
-                return '[REDACTED]';
-            }
-        },
-        $line
+        if (!$srcAssigned) {
+          $srcAssigned = true;
+          return '[SRC]';
+        } elseif (!$destAssigned) {
+          $destAssigned = true;
+          return '[DEST]';
+        } else {
+          return '[REDACTED]';
+        }
+      },
+      $line
     );
 
     $redactedLines[] = $line;
-}
+  }
 
-$content = implode("\n", $redactedLines);
-
-    // 🔒 Redact filenames in last_check_archive_output.log
-    if ($filename === 'last_check_archive_output.log') {
-      $lines = explode("\n", $content);
-      $redactedLines = array_map(function ($line) {
-        // Match: date time flags size size filename
-        if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+.+?\s+\d+\s+\d+\s+)(.+)$/', $line, $matches)) {
-          return $matches[1] . '[REDACTED_FILENAME]';
-        }
-        return $line;
-      }, $lines);
-      $content = implode("\n", $redactedLines);
-    }
-	
-			if ($filename === 'archive_history.log') {
-  $lines = explode("\n", $content);
-  $redactedLines = array_map(function ($line) {
-    // Match: [timestamp] ✅ Success: <SRC> → <DEST>
-    if (preg_match('/^(.*Success:\s+)(.+?)\s+→\s+(.+)$/', $line, $matches)) {
-      return $matches[1] . '[SRC] → [DEST]';
-    }
-    return $line;
-  }, $lines);
   $content = implode("\n", $redactedLines);
 }
 
-    file_put_contents($dest, $content);
-  }
+if ($filename === 'extractor_debug.log') {
+  $excludedPaths = ['/usr/bin/7zzs'];
+  $lines = explode("\n", $content);
+  $redactedLines = [];
 
-  // Redacted system info (remove hostname)
-  $hostname = php_uname('n');
-  $plgFile = '/boot/config/plugins/zip_manager.plg';
+  foreach ($lines as $line) {
+    $srcAssigned = false;
+    $destAssigned = false;
 
-  if (file_exists($plgFile)) {
-    $raw = file_get_contents($plgFile);
-    libxml_use_internal_errors(true);
-    $xml = simplexml_load_string($raw);
-    if ($xml === false) {
-      echo "Failed to parse XML.";
-      foreach (libxml_get_errors() as $error) {
-        echo "<br>", htmlspecialchars($error->message);
-      }
-    } else {
-      $version = (string) $xml['version'] ?? 'unknown';
-    }
-  }
+    $line = preg_replace('/^- (.+)$/', '- [REDACTED_NAME]', $line);
+    $line = preg_replace('#^(✅ chown succeeded: )(.+?) ->#', '$1[SRC] ->', $line);
+    $line = preg_replace('#^(✅ chmod applied: )(.+?) ->#', '$1[SRC] ->', $line);
 
-  $sysInfo = "Generated: " . date('Y-m-d H:i:s') . "\n";
-  $sysInfo .= str_replace($hostname, '[REDACTED_HOST]', php_uname()) . "\n";
-  $sysInfo .= "PHP Version: " . phpversion() . "\n";
-  $sysInfo .= "Plugin Version: " . $version . "\n";
+    // 🔐 Mask -p'password' or -p"password" or -p123
+    $line = preg_replace("/-p(['\"]?)[^'\"]+\\1/", "-p'[REDACTED]'", $line);
 
-  file_put_contents("$diagFolder/system_info.log", $sysInfo);
+    // 🔒 Mask /mnt/... paths as [SRC] and [DEST]
+    $line = preg_replace_callback(
+      '#[\'"]?(/mnt/[^\'"\s→\n\r]+(?:/[^\'"\s→\n\r]*)*)[\'"]?#',
+      function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
+        $path = $match[1];
 
-  // Create ZIP
-  $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($diagZip) . " " . escapeshellarg($diagFolder) . " 2>&1";
-  exec($cmd, $zipOutput, $exitCode);
-  file_put_contents($debugLog, implode("\n", $zipOutput));
-
-  // Delete diagnostics folder after zip created
-  exec("rm -rf " . escapeshellarg($diagFolder));
-
-  if (file_exists($diagZip)) {
-    echo "<p style='color:green;'>✅ Diagnostics created: <a href='/boot/config/plugins/zip_manager/" . basename($diagZip) . "' download>Download ZIP</a></p>";
-  } else {
-    echo "<p style='color:red;'>❌ Failed to create diagnostics zip (code $exitCode)</p>";
-  }
-}
-?>
-  </div>
-</div>
-
-<div id="processing-message" style="display: none; color: orange; font-weight: bold; margin-top: 1em;">
-  ⏳ Processing, please wait...
-</div>
-
-<form method="post">
-  <div class="form-row">
-    <label>Files to archive:</label>
-    <div style="position: relative; display: inline-block;">
-      <input type="text" name="zip_sources_display" readonly value="<?= htmlspecialchars(implode(', ', $zipSources)) ?>"
-        onclick="openSourcePicker(event)" style="width: 300px; padding-right: 1em;">
-      <?php if (empty($zipSources)): ?>
-        <span style="
-          position: absolute;
-          left: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #aaa;
-          pointer-events: none;
-          font-style: italic;
-        ">Click to browse - Can select multiple</span>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <div class="form-row">
-    <label>Destination folder:</label>
-    <div style="position: relative; display: inline-block;">
-      <input type="text" name="zip_output_base_display" readonly value="<?= htmlspecialchars($zipDestFull) ?>"
-        onclick="openDestPicker(event)" style="width: 300px; padding-right: 1em;">
-      <?php if (empty($zipDestFull)): ?>
-        <span style="
-          position: absolute;
-          left: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #aaa;
-          pointer-events: none;
-          font-style: italic;
-        ">Click to browse</span>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <div class="form-row">
-    <label>Archive name:</label>
-    <div style="position: relative; display: inline-block;">
-      <input type="text" name="zip_name" id="zip_name" value="<?= htmlspecialchars($archiveName) ?>"
-        style="width: 300px; padding-right: 1em;" oninput="togglePlaceholder(this)">
-      <span id="zip_name_placeholder" style="
-        position: absolute;
-        left: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #aaa;
-        pointer-events: none;
-        font-style: italic;
-        <?= empty($archiveName) ? '' : 'display: none;' ?>
-      ">Set a name</span>
-    </div>
-  </div>
-
-  <script>
-    function togglePlaceholder(input) {
-      const placeholder = document.getElementById('zip_name_placeholder');
-      placeholder.style.display = input.value.trim() ? 'none' : 'inline';
-    }
-  </script>
-
-<div class="form-row" id="password_row" style="<?= $format === '7z' ? '' : 'display: none;' ?>">
-  <label>Archive password:</label>
-  <div style="position: relative; display: inline-block;">
-    <input type="password" name="zip_password" id="zip_password" value="<?= htmlspecialchars($archivePassword) ?>"
-      style="width: 300px; padding-right: 1em;">
-      <?php if (empty($archivePassword)): ?>
-        <span style="
-          position: absolute;
-          left: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #aaa;
-          pointer-events: none;
-          font-style: italic;
-        ">Optional</span>
-      <?php endif; ?>  
-  </div>
-</div>
-
-  <div class="form-row" style="align-items: center;">
-    <label>Archive format:</label>
-    <select name="zip_format" id="zip_format" style="
-      width: 75px !important;
-      min-width: 0 !important;
-      max-width: 75px !important;
-      padding: 6px;
-      font-size: 13px;
-      box-sizing: border-box;
-      display: inline-block;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-    ">
-      <option value="7z" <?= $format === '7z' ? 'selected' : '' ?>>7Z</option>
-      <option value="zip" <?= $format === 'zip' ? 'selected' : '' ?>>ZIP</option>
-      <option value="tar" <?= $format === 'tar' ? 'selected' : '' ?>>TAR</option>
-      <option value="tar.gz" <?= $format === 'tar.gz' ? 'selected' : '' ?>>TAR.GZ</option>
-    </select>
-  </div>
-
-  <input type="hidden" name="zip_sources" value="<?= htmlspecialchars(implode(',', $zipSources)) ?>">
-  <input type="hidden" name="zip_output_base" value="<?= htmlspecialchars($zipDestFull) ?>">
-
-  <?php
-  $disableCreate = empty($zipSources) || empty($zipDestFull) || empty($archiveName) || $totalSelectedSize > MAX_ARCHIVE_SIZE;
-  ?>
-
-  <div style="margin-top: 1.5em;">
-    <input type="submit" name="create" value="🗃️ Create Archive" <?= $disableCreate ? 'disabled style="opacity:0.5; cursor:not-allowed;" title="Please select files and a destination."' : '' ?>>
-    <input type="submit" name="clear" value="♻️ Reset Form">
-  </div>
-</form>
-
-<?php if ($totalSelectedSize > 0): ?>
-  <div class="form-row" style="align-items: center;">
-    <label style="margin-bottom: 0;">Total size:</label>
-    <div
-      style="padding-top: 6px; font-weight: bold; color: <?= $totalSelectedSize > MAX_ARCHIVE_SIZE ? 'red' : 'green' ?>;">
-      <?= formatBytes($totalSelectedSize) ?> / <?= formatBytes(MAX_ARCHIVE_SIZE) ?> limit
-    </div>
-  </div>
-<?php endif; ?>
-<br>
-<?php if ($isSourcePicker): ?>
-  <div id="file-picker-container">
-    <?= renderBreadcrumb($root, $sourcePath, 'browse_sources', [
-      'sourcepicker' => 1,
-      'sources' => implode(',', $zipSources),
-      'dest' => $zipDestRel,
-      'name' => $archiveName,
-      'format' => $format
-    ]) ?>
-    <div class="folder-list">
-      <?php
-      $excludedFolders = ['user0', 'rootshare', 'addons'];
-      $entries = array_filter(scandir($sourcePath), fn($e) => $e !== '.' && $e !== '..' && !in_array($e, $excludedFolders));
-      usort($entries, function ($a, $b) use ($sourcePath) {
-        $aIsDir = is_dir("$sourcePath/$a");
-        $bIsDir = is_dir("$sourcePath/$b");
-        if ($aIsDir === $bIsDir)
-          return strnatcasecmp($a, $b);
-        return $aIsDir ? -1 : 1;
-      });
-      ?>
-
-      <?php
-      if ($sourcePath !== $root) {
-        $parent = dirname($sourcePath);
-        $parentRel = trim(str_replace($root, '', $parent), '/');
-$upUrl = '?sourcepicker=1'
-  . '&browse_sources=' . urlencode($parentRel)
-  . '&sources=' . urlencode(implode(',', $zipSources))
-  . '&dest=' . urlencode($zipDestRel)
-  . '&name=' . urlencode($archiveName)
-  . '&format=' . urlencode($format)
-  . '&password=' . urlencode($archivePassword);
-        echo '<a href="' . $upUrl . '">⬆️ Up</a>';
-      }
-      foreach ($entries as $entry) {
-        $path = $sourcePath . '/' . $entry;
-        $real = realpath($path);
-        if (!$real || $real === rtrim($root, '/'))
-          continue;
-        $normalized = preg_replace('#/+#', '/', $real);
-        $relativePath = trim(str_replace($root, '', $normalized), '/');
-        $depth = substr_count($relativePath, '/');
-        $isTopLevel = ($depth === 0);
-        $isSelected = in_array($normalized, $zipSources);
-
-        $newSources = $isSelected
-          ? array_filter($zipSources, fn($s) => $s !== $normalized)
-          : array_merge($zipSources, [$normalized]);
-
-        $newSources = array_unique(array_map(fn($p) => preg_replace('#/+#', '/', trim($p)), $newSources));
-
-        $toggleUrl = '?sourcepicker=1&browse_sources=' . urlencode($sourceRelPath) .
-          '&sources=' . urlencode(implode(',', $newSources)) .
-          '&dest=' . urlencode($zipDestRel) .
-          '&name=' . urlencode($archiveName) .
-          '&format=' . urlencode($format) .
-		  '&password=' . urlencode($archivePassword);
-
-        echo '<div style="display:flex; align-items:center; gap:0.5em;">';
-        echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
-        echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
-          ($isTopLevel ? ' disabled title="Top-level folders like /mnt/' . htmlspecialchars($entry) . ' cannot be selected."' : '') .
-          ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
-        echo '</label>';
-
-        if (is_dir($path)) {
-          $browseRel = trim(str_replace($root, '', $path), '/');
-          $browseUrl = '?sourcepicker=1&browse_sources=' . urlencode($browseRel) .
-            '&sources=' . urlencode(implode(',', $zipSources)) .
-            '&dest=' . urlencode($zipDestRel) .
-            '&name=' . urlencode($archiveName) .
-            '&format=' . urlencode($format) .
-			'&password=' . urlencode($archivePassword);
-
-          echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
-        } else {
-          $size = formatBytes(filesize($path));
-          echo '<span class="file-entry">📄 ' . htmlspecialchars($entry) . " ($size)</span>";
+        // Skip excluded paths
+        foreach ($excludedPaths as $excluded) {
+          if (strpos($path, $excluded) === 0) {
+            return $match[0]; // leave unchanged
+          }
         }
 
-        echo '</div>';
-      }
-      ?>
-    </div>
-  </div>
-<?php endif; ?>
+        if (!$srcAssigned) {
+          $srcAssigned = true;
+          return '[SRC]';
+        } elseif (!$destAssigned) {
+          $destAssigned = true;
+          return '[DEST]';
+        } else {
+          return '[REDACTED]';
+        }
+      },
+      $line
+    );
 
-<?php if ($isDestPicker): ?>
-  <div id="dest-picker-container">
-    <?= renderBreadcrumb($root, $destPath, 'browse_dest', [
-      'destpicker' => 1,
-      'sources' => implode(',', $zipSources),
-      'dest' => $zipDestRel,
-      'name' => $archiveName,
-      'format' => $format
-    ]) ?>
-    <div class="folder-list">
-      <?php
-      $excludedFolders = ['user0', 'rootshare', 'addons'];
-      $entries = array_filter(
-        scandir($destPath),
-        fn($e) =>
-        $e !== '.' && $e !== '..' && !in_array($e, $excludedFolders) && is_dir("$destPath/$e")
-      );
-      usort($entries, fn($a, $b) => strnatcasecmp($a, $b));
-      ?>
-
-      <?php
-      if ($destPath !== $root) {
-        $parent = dirname($destPath);
-        $parentRel = trim(str_replace($root, '', $parent), '/');
-        $upUrl = '?destpicker=1'
-          . '&browse_dest=' . urlencode($parentRel)
-          . '&sources=' . urlencode(implode(',', $zipSources))
-          . '&dest=' . urlencode($zipDestRel)
-          . '&name=' . urlencode($archiveName)
-          . '&format=' . urlencode($format)
-		  . '&password=' . urlencode($archivePassword);
-        echo '<a href="' . $upUrl . '">⬆️ Up</a>';
-      }
-      foreach ($entries as $entry) {
-        $path = $destPath . '/' . $entry;
-        $real = realpath($path);
-        if (!$real || $real === rtrim($root, '/'))
-          continue;
-        $normalized = preg_replace('#/+#', '/', $real);
-        $relativePath = trim(str_replace($root, '', $normalized), '/');
-        $depth = substr_count($relativePath, '/');
-        $isTopLevel = ($depth === 0);
-        $isSelected = ($zipDestFull === $normalized);
-
-        $toggleUrl = '?destpicker=1&browse_dest=' . urlencode($destRelPath) .
-          '&sources=' . urlencode(implode(',', $zipSources)) .
-          '&dest=' . urlencode($isSelected ? '' : trim(str_replace($root, '', $normalized), '/')) .
-          '&name=' . urlencode($archiveName) .
-          '&format=' . urlencode($format) .
-		  '&password=' . urlencode($archivePassword);
-
-        $browseRel = trim(str_replace($root, '', $path), '/');
-        $browseUrl = '?destpicker=1&browse_dest=' . urlencode($browseRel) .
-          '&sources=' . urlencode(implode(',', $zipSources)) .
-          '&dest=' . urlencode($zipDestRel) .
-          '&name=' . urlencode($archiveName) .
-          '&format=' . urlencode($format) .
-		  '&password=' . urlencode($archivePassword);
-
-        echo '<div style="display:flex; align-items:center; gap:0.5em;">';
-        echo '<label style="cursor:pointer; display:flex; align-items:center; gap:0.5em;">';
-        echo '<input type="checkbox" ' . ($isSelected ? 'checked' : '') .
-          ($isTopLevel ? ' disabled title="Top-level folders like /mnt/' . htmlspecialchars($entry) . ' cannot be selected as a destination."' : '') .
-          ' onclick="event.stopPropagation(); window.location=\'' . $toggleUrl . '\';">';
-        echo '</label>';
-        echo '<a href="' . $browseUrl . '">📂 ' . htmlspecialchars($entry) . '</a>';
-        echo '</div>';
-      }
-      ?>
-    </div>
-  </div>
-<?php endif; ?>
-
-<?= $archiveResult ?>
-
-<?php
-// Read the last 5 lines
-$historyLines = file_exists($archiveLogFile) ? array_slice(file($archiveLogFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -10) : [];
-
-echo '<br><details open><summary style="font-size: 1.2em;"><strong>📜 Archiving History</strong></summary>';
-echo "<div style='font-size: 1.2em; margin-top: 0.5em; white-space: pre-wrap;'>";
-echo $historyLines ? htmlspecialchars(implode("\n", $historyLines)) : "No archives created yet";
-echo "</div></details>";
-
-if (isset($_POST['clear_history'])) {
-  // 🔍 Debug: Check file status before clearing
-  if (!file_exists($archiveLogFile)) {
-    echo "<pre>⚠️ Log file does not exist: $archiveLogFile</pre>";
-  } elseif (!is_writable($archiveLogFile)) {
-    echo "<pre>⚠️ Log file is not writable: $archiveLogFile</pre>";
-  } else {
-    echo "<pre>✅ Log file exists and is writable</pre>";
+    $redactedLines[] = $line;
   }
 
-  // 🧼 Attempt to clear the file
-  $fp = @fopen($archiveLogFile, 'w');
-  if ($fp) {
-    fclose($fp); // Truncate the file
-    @chown($archiveLogFile, 'nobody');
-    @chgrp($archiveLogFile, 'users');
-    chmod($archiveLogFile, 0644);
-    $redirectUrl = strtok($_SERVER["REQUEST_URI"], '?');
-    $redirectUrl .= '?' . http_build_query([
-      'sources' => implode(',', $zipSources),
-      'dest' => $zipDestRel,
-      'name' => $archiveName,
-      'format' => $format
-    ]);
-    echo "<script>window.location.href = '$redirectUrl';</script>";
-  } else {
-    echo "<pre>❌ Failed to open log file for clearing: $archiveLogFile</pre>";
-  }
-  return;
+  $content = implode("\n", $redactedLines);
 }
-?>
 
-<form method="post" style="margin-top: 0.5em;">
-  <input type="submit" name="clear_history" value="📜 Clear History"
-    onclick="return confirm('Are you sure you want to clear the archiving history?');">
-</form>
+        file_put_contents($dest, $content);
+      }
+
+      // Redacted system info (remove hostname)
+      $hostname = php_uname('n');
+      $plgFile = '/boot/config/plugins/zip_manager.plg';
+
+      if (file_exists($plgFile)) {
+        $raw = file_get_contents($plgFile);
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($raw);
+        if ($xml === false) {
+          echo "Failed to parse XML.";
+          foreach (libxml_get_errors() as $error) {
+            echo "<br>", htmlspecialchars($error->message);
+          }
+        } else {
+          $version = (string) $xml['version'] ?? 'unknown';
+        }
+      }
+
+      $sysInfo = "Generated: " . date('Y-m-d H:i:s') . "\n";
+      $sysInfo .= str_replace($hostname, '[REDACTED_HOST]', php_uname()) . "\n";
+      $sysInfo .= "PHP Version: " . phpversion() . "\n";
+      $sysInfo .= "Plugin Version: " . $version . "\n";
+
+      file_put_contents("$diagFolder/system_info.log", $sysInfo);
+
+      // Create ZIP
+      $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($diagZip) . " " . escapeshellarg($diagFolder) . " 2>&1";
+      exec($cmd, $zipOutput, $exitCode);
+      file_put_contents($debugLog, implode("\n", $zipOutput));
+
+      // Delete diagnostics folder after zip created
+      exec("rm -rf " . escapeshellarg($diagFolder));
+
+      if (file_exists($diagZip)) {
+        echo "<p style='color:green;'>✅ Diagnostics created: <a href='/boot/config/plugins/zip_manager/" . basename($diagZip) . "' download>Download ZIP</a></p>";
+      } else {
+        echo "<p style='color:red;'>❌ Failed to create diagnostics zip (code $exitCode)</p>";
+      }
+    }
+    ?>
+  </div>
+</div>
+
+<div style="position: relative;">
+  <!-- 🧩 Left: Archiving Form -->
+  <div style="max-width: 640px;">
+    <h2 style="margin: 0; margin-bottom: 8px;">📦 Create archive using 7-zip</h2>
+
+    <!-- 📁 Picker Modal -->
+     <div style="position: relative;">
+    <div id="pickerModal" style="display: none;">
+      <div id="breadcrumb"></div>
+      <ul id="fileList"></ul>
+      <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8;">* Double-click to select a folder</div>
+    </div>
+  </div>
+    <br>
+
+    <!-- ⚠️ Overwrite Confirmation Modal -->
+    <div id="overwriteModal" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; font-size: 16px; padding: 12px; color: orange; max-width: 448px;">
+      <div id="overwriteHeader" style="font-weight: bold; margin-bottom: 8px; color: white;">⚠️ The following files may be overwritten:</div>
+      <ul id="overwriteList" style="max-height: 200px; list-style: none; overflow-y: auto; padding-left: 18px;"></ul>
+      <div style="margin-top: 12px;">
+        <button id="overwriteConfirm" style="margin-right: 8px;">✅ Continue</button>
+        <button id="overwriteCancel">❌ Cancel</button>
+      </div>
+    </div>
+  </div>
+  <br>
+
+<div class="field-row">
+  <label for="inputFile">Files to archive:</label>
+  <div class="input-wrapper">
+    <input type="text" id="inputFile" class="highlight-input"
+  placeholder="Click to browse - Multiple is allowed" readonly
+  onclick="openPicker('inputFile', false, '/mnt/')" />
+    <span id="fileCountDisplay" data-total-bytes="0"></span>
+  </div>
+</div>
+<div id="selectedTags" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+<br>
+
+    <div class="field-row">
+      <label for="outputDir">Output Directory:</label>
+      <input type="text" id="outputDir" class="highlight-input"
+        placeholder="Click to browse" readonly
+        onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+    </div>
+
+    <div class="field-row">
+      <label for="archiveName">Archive name:</label>
+      <input type="text" id="archiveName" class="highlight-input"
+        placeholder="Enter archive name" value="archive" />
+    </div>
+
+<div id="passwordField" class="field-row hidden">
+  <label for="archivePassword">Archive password:</label>
+  <div class="input-wrapper">
+    <input type="password" id="archivePassword" class="highlight-input" placeholder="Optional" />
+    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
+      <label style="color: orange; font-size: 16px; cursor: pointer;">
+        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
+        Show
+      </label>
+    </span>
+  </div>
+</div>
+
+    <div class="field-row">
+      <label for="archiveFormat" style="color: white;">Archive format:</label>
+      <select id="archiveFormat" class="format-dropdown">
+        <option value="7z">7z</option>
+        <option value="rar">rar</option>
+        <option value="zip">zip</option>
+        <option value="tar">tar</option>
+        <option value="tar.gz">tar.gz</option>
+      </select>
+    </div>
+
+    <button onclick="runArchiving()">🚀 Create Archive</button>
+    <button onclick="clearForm()">🧹 Clear Form</button>
+    <br/><br/>
+    <div id="statusBox"></div>
+
+  <!-- 📜 Right: Floating Archiving History -->
+  <div style="position: absolute; top: 6px; right: 200px; width: 800px;">
+    <div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-bottom: 8px;">
+      <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
+      <h2 style="margin: 0;">📜 Archiving history</h2>
+    </div>
+
+    <div id="historyContainer" style="margin-top: 10px;">
+      <div id="archiveLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 950px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="archiveLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No archiving history!</div>
+    </div>
+
+    <button onclick="cleararchiveHistory()" style="margin-top: 12px;">🧹 Clear History</button>
+
+    <!-- 🧨 Clear History Modal -->
+    <div id="clearHistoryModal" style="display:none; margin-top:12px; background:#111111; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
+      <div style="font-weight:bold; margin-bottom:8px;">⚠️ Clear archiving history?</div>
+      <div>This will remove all previous archiving records. This cannot be undone.</div>
+      <div style="margin-top:12px;">
+        <button id="clearHistoryConfirm" style="margin-right:8px;">✅ Yes, Clear</button>
+        <button id="clearHistoryCancel">❌ Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
-  // Hide pickers when clicking outside
-  document.addEventListener('click', function (event) {
-    const filePicker = document.getElementById('file-picker-container');
-    const destPicker = document.getElementById('dest-picker-container');
+  function togglePasswordVisibility() {
+  const passwordInput = document.getElementById("archivePassword");
+  const toggle = document.getElementById("togglePassword");
+  passwordInput.type = toggle.checked ? "text" : "password";
+}
 
-    function clickInside(element) {
-      return element && (element.contains(event.target) || event.target === element);
-    }
+function toggleHistory() {
+  const container = document.getElementById("historyContainer");
+  const arrow = document.getElementById("historyArrow");
 
-    if (filePicker && !clickInside(filePicker)) {
-      filePicker.style.display = 'none';
-      const url = new URL(window.location);
-      url.searchParams.delete('sourcepicker');
-      url.searchParams.delete('browse_sources');
-      history.replaceState(null, '', url.toString());
-    }
+  const visible = container.style.display !== "none";
+  container.style.display = visible ? "none" : "block";
+  arrow.textContent = visible ? "▶" : "▼";
+}
+function refresharchiveLog() {
+  fetch("/boot/config/plugins/zip_manager/logs/archiver_history.log")
+    .then(res => {
+      if (!res.ok) throw new Error("Log not found");
+      return res.text();
+    })
+    .then(data => {
+      const trimmed = data.trim();
+      const logBox = document.getElementById("archiveLogBox");
 
-    if (destPicker && !clickInside(destPicker)) {
-      destPicker.style.display = 'none';
-      const url = new URL(window.location);
-      url.searchParams.delete('destpicker');
-      url.searchParams.delete('browse_dest');
-      history.replaceState(null, '', url.toString());
-    }
-  });
-
-  // Show "processing" message on archive form submit
-  document.querySelectorAll('form[method="post"]').forEach(form => {
-    form.addEventListener('submit', function () {
-      const msg = document.getElementById('processing-message');
-      if (msg) msg.style.display = 'block';
+      if (trimmed) {
+        logBox.style.display = "block";
+        logBox.innerText = trimmed;
+      } else {
+        logBox.style.display = "none";
+        showNoHistoryMessage();
+      }
+    })
+    .catch(() => {
+      document.getElementById("archiveLogBox").style.display = "none";
+      showNoHistoryMessage();
     });
+}
+
+function showNoHistoryMessage() {
+  const placeholder = document.getElementById("archiveLogPlaceholder");
+  placeholder.innerText = "No archiving history!";
+  placeholder.style.display = "block";
+}
+
+function cleararchiveHistory() {
+  const modal = document.getElementById("clearHistoryModal");
+  const confirmBtn = document.getElementById("clearHistoryConfirm");
+  const cancelBtn = document.getElementById("clearHistoryCancel");
+  const logBox = document.getElementById("archiveLogBox");
+
+  modal.style.display = "block";
+
+  confirmBtn.onclick = () => {
+    modal.style.display = "none";
+    fetch("/plugins/zip_manager/helpers/clear_archive_history.php", { method: "GET" })
+      .then(res => res.text())
+      .then(() => {
+        logBox.innerText = "No archiving history!";
+        logBox.style.display = "block";
+      })
+      .catch(() => {
+        logBox.innerText = "❌ Failed to clear history.";
+        logBox.style.display = "block";
+      });
+  };
+
+  cancelBtn.onclick = () => {
+    modal.style.display = "none";
+  };
+}
+
+function parentDirectory(path) {
+  if (!path) return '/mnt/';
+  // Normalize slashes
+  if (!path.endsWith('/')) {
+    path = path.substring(0, path.lastIndexOf('/') + 1);
+  }
+  if (path === '') path = '/mnt/';
+  return path;
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(1)} ${sizes[i]}`;
+}
+
+let isModalLocked = false;
+let disallowedBaseFolders = [];
+let clickTimer = null;
+let currentTargetId = null;
+let currentIsDir = null;
+let currentPath = null;
+
+function openPicker(targetId, isDir, path = "/mnt/") {
+  document.getElementById("statusBox").innerText = "";
+  if (isModalLocked) return;
+
+  currentTargetId = targetId;
+  currentIsDir = isDir;
+  currentPath = path;
+
+  const showHint = isDir || targetId === "inputFile";
+  document.getElementById("pickerMessage").style.display = showHint ? "block" : "none";
+  updateBreadcrumb(path);
+
+  fetch(`/plugins/zip_manager/helpers/list_files.php?dir=${encodeURIComponent(path)}`)
+    .then(res => res.json())
+    .then(items => {
+      if (items.error) {
+        document.getElementById("statusBox").innerText = "❌ " + items.error;
+        return;
+      }
+
+      const ul = document.getElementById("fileList");
+      ul.innerHTML = "";
+
+      if (path !== "/mnt/") {
+        const liUp = document.createElement("li");
+        const spanUp = document.createElement("span");
+        spanUp.textContent = "⬆️ Parent Directory";
+        spanUp.style.color = "orange";
+        spanUp.style.cursor = "pointer";
+        spanUp.onclick = () => {
+          let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
+          parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
+          if (!parentPath || parentPath.length < 6) parentPath = "/mnt/";
+          openPicker(targetId, isDir, parentPath);
+        };
+        liUp.appendChild(spanUp);
+        ul.appendChild(liUp);
+      }
+
+      const skipFolders = ['user0/', 'addons/', 'rootshare/'];
+const isOutputField = targetId === "outputDir";
+
+const filteredItems = items
+  .filter(item => {
+    if (skipFolders.includes(item.name)) return false;
+    if (isOutputField && !item.name.endsWith("/")) return false; // 💡 Hide files in output picker
+    return true;
+  })
+  .sort((a, b) => {
+    const aFolder = a.name.endsWith("/");
+    const bFolder = b.name.endsWith("/");
+    if (aFolder && !bFolder) return -1;
+    if (!aFolder && bFolder) return 1;
+    return a.name.localeCompare(b.name);
   });
 
-  // Clear form fields after successful archive
-  document.addEventListener('DOMContentLoaded', function () {
-    const successMsg = document.querySelector('p');
-    if (successMsg && successMsg.textContent.includes('✅ Archive Created')) {
-      const form = document.querySelector('form[method="post"]');
-      if (form) form.reset();
+      // 🔒 Dynamically build list of top-level folders
+      if (disallowedBaseFolders.length === 0 && path === "/mnt/") {
+        disallowedBaseFolders = filteredItems
+          .filter(item => item.name.endsWith("/"))
+          .map(item => path + item.name);
+      }
 
-      // Clear display fields manually
-      const sourceDisplay = document.querySelector('input[name="zip_sources_display"]');
-      const destDisplay = document.querySelector('input[name="zip_output_base_display"]');
-      if (sourceDisplay) sourceDisplay.value = '';
-      if (destDisplay) destDisplay.value = '';
+      const entries = filteredItems.map(item => ({
+        name: item.name,
+        size: item.size,
+        fullPath: path + item.name,
+        isFolder: item.name.endsWith("/")
+      }));
+
+      entries.forEach(entry => {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        const icon = entry.isFolder ? "📁" : "📄";
+        const sizeStr = !entry.isFolder && entry.size > 0 ? ` (${formatBytes(entry.size)})` : "";
+
+        span.textContent = `${icon} ${entry.name}${sizeStr}`;
+
+const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
+if (isDisallowed && entry.isFolder) {
+  span.title = "Can't be selected";
+}
+        span.style.color = "orange";
+        span.style.cursor = "pointer";
+        span.style.fontFamily = "monospace";
+        span.style.fontSize = "16px";
+
+        let localClickTimer = null;
+
+        // 🖱️ Single-click handler
+span.onclick = () => {
+  if (localClickTimer) clearTimeout(localClickTimer);
+
+  localClickTimer = setTimeout(() => {
+    if (entry.isFolder) {
+      openPicker(targetId, isDir, entry.fullPath);
+    } else if (targetId === "inputFile") {
+      fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(entry.fullPath)}`)
+        .then(res => res.json())
+        .then(data => {
+          addFileToSelection(entry.fullPath, data.bytes || 0);
+        });
     }
-  });
-</script>
-<script>
-  function openSourcePicker(event) {
-    if (event) event.stopPropagation();
+    localClickTimer = null;
+  }, 350);
+};
 
-    const format = document.getElementById('zip_format').value;
-    const url = new URL(window.location.href);
+        // 🖱️ Double-click handler for folder selection
+span.ondblclick = () => {
+  if (localClickTimer) clearTimeout(localClickTimer);
+  localClickTimer = null;
 
-    // Clear any existing destpicker param
-    url.searchParams.delete('destpicker');
-    url.searchParams.delete('browse_dest');
+  if (entry.isFolder) {
+    const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
+    if (isDisallowed) {
+      shakeModal();
+      return;
+    }
 
-    url.searchParams.set('sourcepicker', '1');
-    url.searchParams.set('browse_sources', '<?= $sourceRelPath ?>');
-    url.searchParams.set('sources', '<?= implode(',', $zipSources) ?>');
-    url.searchParams.set('dest', '<?= $zipDestRel ?>');
-    url.searchParams.set('name', '<?= $archiveName ?>');
-    const password = document.getElementById('zip_password')?.value || '';
-url.searchParams.set('format', format);
-if (password) url.searchParams.set('password', password);
+    fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(entry.fullPath)}`)
+      .then(res => res.json())
+      .then(data => {
+        const size = data.bytes || 0;
 
-    window.location.href = url.toString();
+        if (currentTargetId === "inputFile") {
+          addFileToSelection(entry.fullPath, size);
+          // ❌ Don't close modal — allow multi-select
+        } else if (currentTargetId === "outputDir") {
+          document.getElementById("outputDir").value = entry.fullPath;
+          closeModal(); // ✅ Only close for output folder
+        }
+      });
+  }
+};
+
+        li.appendChild(span);
+        ul.appendChild(li);
+      });
+
+// 🧩 Show "Done Selecting" button only for input picker
+const footerId = "pickerFooter";
+const existingFooter = document.getElementById(footerId);
+
+// ✅ Add button for inputFile picker
+if (targetId === "inputFile" && !existingFooter) {
+const footer = document.createElement("div");
+footer.id = "pickerFooter";
+footer.style.cssText = `
+  position: absolute;
+  top: 25px;
+  right: 0px;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateY(-10px);
+`;
+footer.innerHTML = `<button onclick="closeModal()" style="
+  color: orange;
+  background: #222;
+  border: 1px solid orange;
+  padding: 6px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+">✅ Done</button>`;
+document.getElementById("pickerModal").appendChild(footer);
+
+}
+
+// 🧹 Remove footer if switching to output picker
+if (targetId !== "inputFile" && existingFooter) {
+  existingFooter.remove();
+}
+
+      document.getElementById("pickerModal").style.display = "block";
+    });
+}
+
+// 🧩 Tag Handler with Size Awareness
+function addFileToSelection(path, size = 0) {
+  const inputElem = document.getElementById("inputFile");
+  const tagContainer = document.getElementById("selectedTags");
+  const displaySpan = document.getElementById("fileCountDisplay");
+
+  // 🧠 Parse current paths and check for duplicates
+  const currentPaths = inputElem.value.split(',').map(p => p.trim()).filter(p => p);
+  if (currentPaths.includes(path)) return;
+
+  // ✅ Update input field with new path
+  currentPaths.push(path);
+  inputElem.value = currentPaths.join(', ');
+
+  // ✅ Update size display (no enforcement)
+  const currentTotal = parseInt(displaySpan.dataset.totalBytes || "0", 10);
+  const newTotal = currentTotal + size;
+  displaySpan.dataset.totalBytes = newTotal.toString();
+  displaySpan.textContent = newTotal > 0 ? `💾 ${formatBytes(newTotal)}` : "";
+
+  // 🏷️ Create tag
+  const tag = document.createElement("div");
+  tag.textContent = path;
+  tag.style.cssText = `
+    background:#222; color:orange; padding:4px 8px; border-radius:4px;
+    font-family:monospace; font-size:14px; display:inline-flex; align-items:center; gap:6px;
+  `;
+
+  // ❌ Remove button
+  const removeBtn = document.createElement("span");
+  removeBtn.textContent = "✖";
+  removeBtn.style.cssText = "cursor:pointer; color:red;";
+  removeBtn.onclick = (event) => {
+  event.stopPropagation();
+    const updatedPaths = inputElem.value
+      .split(',')
+      .map(p => p.trim())
+      .filter(p => p && p !== path);
+
+    inputElem.value = updatedPaths.join(', ');
+
+    tag.remove();
+
+    const updatedTotal = parseInt(displaySpan.dataset.totalBytes || "0", 10) - size;
+    displaySpan.dataset.totalBytes = updatedTotal.toString();
+    displaySpan.textContent = updatedTotal > 0
+      ? `💾 ${formatBytes(updatedTotal)}`
+      : "";
+
+          // 🧹 Fade out floating 'Done Selecting' button if no tags remain
+  if (tagContainer.querySelectorAll(".selection-tag").length === 0) {
+    const footer = document.getElementById("pickerFooter");
+    if (footer) {
+      footer.style.opacity = "0";
+      footer.style.transform = "translateY(-10px)";
+    }
+  }
+  };
+
+  tag.appendChild(removeBtn);
+  tagContainer.appendChild(tag);
+
+  // ✅ Show footer button if hidden
+const footer = document.getElementById("pickerFooter");
+if (footer && footer.style.opacity === "0") {
+  footer.style.opacity = "1";
+  footer.style.transform = "translateY(0)";
+}
+}
+
+function updateBreadcrumb(path) {
+  const breadcrumbDiv = document.getElementById("breadcrumb");
+  breadcrumbDiv.innerHTML = "";
+
+  if (!path.endsWith("/")) path += "/";
+
+  if (!path.startsWith("/mnt/")) {
+    path = "/mnt/";
   }
 
-  function openDestPicker(event) {
-    if (event) event.stopPropagation();
+const rootSpan = document.createElement("span");
+rootSpan.innerHTML = '<i class="fas fa-home" style="color:green;"></i>';
+rootSpan.style.cursor = "pointer";
+rootSpan.style.textDecoration = "underline";
+rootSpan.onclick = () => openPicker(currentTargetId, currentIsDir, "/mnt/");
+breadcrumbDiv.appendChild(rootSpan);
 
-    const format = document.getElementById('zip_format').value;
-    const url = new URL(window.location.href);
+  let subPath = path.substring(5); // after /mnt/
 
-    // Clear any existing sourcepicker param
-    url.searchParams.delete('sourcepicker');
-    url.searchParams.delete('browse_sources');
+  if (subPath.length > 0) {
+    const parts = subPath.split("/").filter(p => p.length > 0);
 
-    url.searchParams.set('destpicker', '1');
-    url.searchParams.set('browse_dest', '<?= $destRelPath ?>');
-    url.searchParams.set('sources', '<?= implode(',', $zipSources) ?>');
-    url.searchParams.set('dest', '<?= $zipDestRel ?>');
-    url.searchParams.set('name', '<?= $archiveName ?>');
-    const password = document.getElementById('zip_password')?.value || '';
-url.searchParams.set('format', format);
-if (password) url.searchParams.set('password', password);
+    parts.forEach((part, idx) => {
+      const sep = document.createElement("span");
+      sep.textContent = "->";
+      sep.className = "separator";
+      breadcrumbDiv.appendChild(sep);
 
-    window.location.href = url.toString();
-  }
-</script>
-<script>
-  let cachedPassword = ''; // Store the password temporarily
+      const cumulativePath = "/mnt/" + parts.slice(0, idx + 1).join("/") + "/";
 
-function togglePasswordField() {
-  const format = document.getElementById('zip_format').value;
-  const passwordRow = document.getElementById('password_row');
-
-  if (format === '7z') {
-    passwordRow.style.display = 'flex';
-  } else {
-    passwordRow.style.display = 'none';
+      const span = document.createElement("span");
+      span.textContent = part;
+      span.style.cursor = "pointer";
+      span.style.textDecoration = "underline";
+      span.onclick = () => openPicker(currentTargetId, currentIsDir, cumulativePath);
+      breadcrumbDiv.appendChild(span);
+    });
   }
 }
 
-  document.addEventListener('DOMContentLoaded', togglePasswordField);
-  document.getElementById('zip_format').addEventListener('change', togglePasswordField);
-</script>
-<script>
-  const passwordInput = document.getElementById('zip_password');
-  const passwordPlaceholder = passwordInput?.nextElementSibling;
+function closeModal() {
+  document.getElementById("pickerModal").style.display = "none";
+}
 
-  function togglePasswordPlaceholder() {
-    if (passwordPlaceholder) {
-      passwordPlaceholder.style.display = passwordInput.value.trim() ? 'none' : 'inline';
-    }
+document.addEventListener("click", (event) => {
+  const modal = document.getElementById("pickerModal");
+  if (modal.style.display === "block" && !modal.contains(event.target)) {
+    closeModal();
+  }
+});
+
+function shakeModal() {
+  const modal = document.getElementById("pickerModal");
+  modal.classList.add("shake");
+  setTimeout(() => modal.classList.remove("shake"), 500);
+}
+
+function clearForm() {
+  // Clear form fields
+  document.getElementById("inputFile").value = "";
+  document.getElementById("archivePassword").value = "";
+  document.getElementById("outputDir").value = "";
+  document.getElementById("archiveName").value = "archive";
+  document.getElementById("selectedTags").innerHTML = "";
+
+  // Clear messages
+  document.getElementById("statusBox").innerText = "";
+  document.getElementById("fileCountDisplay").textContent = "";
+  document.getElementById("togglePasswordWrapper").style.display = "none";
+
+  // Hide modals
+  document.getElementById("pickerModal").style.display = "none";
+  document.getElementById("overwriteModal").style.display = "none";
+
+  // ✅ Re-enable archive button
+  const archiveButton = document.querySelector("button[onclick='runArchiving()']");
+  if (archiveButton) archiveButton.disabled = false;
+
+  window.location.href = window.location.href;
+}
+
+function runArchiving() {
+  const input = document.getElementById("inputFile").value;
+  const output = document.getElementById("outputDir").value;
+  const password = document.getElementById("archivePassword").value || "";
+  const format = document.getElementById("archiveFormat").value;
+  const name = document.getElementById("archiveName").value.trim() || "archive";
+
+  const statusBox = document.getElementById("statusBox");
+  const archiveButton = document.querySelector("button[onclick='runArchiving()']");
+  const modal = document.getElementById("overwriteModal");
+  const list = document.getElementById("overwriteList");
+  const confirmBtn = document.getElementById("overwriteConfirm");
+  const cancelBtn = document.getElementById("overwriteCancel");
+
+  statusBox.innerText = "";
+
+  if (!input || !output || !name) {
+    statusBox.innerText = "❌ Please select both files to archive and output directory.";
+    return;
   }
 
-  passwordInput?.addEventListener('input', togglePasswordPlaceholder);
-  document.addEventListener('DOMContentLoaded', togglePasswordPlaceholder);
+  archiveButton.disabled = true;
+  statusBox.innerText = "⏳ Checking for overwrite conflicts...";
+
+  const checkEndpoint = `/plugins/zip_manager/helpers/check_archive_overwrites.php?input=${encodeURIComponent(input)}&output=${encodeURIComponent(output)}&format=${encodeURIComponent(format)}&name=${encodeURIComponent(name)}`;
+  const archiveEndpoint = `/plugins/zip_manager/helpers/archive.php?input=${encodeURIComponent(input)}&output=${encodeURIComponent(output)}&password=${encodeURIComponent(password)}&format=${encodeURIComponent(format)}&name=${encodeURIComponent(name)}`;
+
+  fetch(checkEndpoint)
+    .then(res => res.json())
+    .then(data => {
+      if (data.exists) {
+        list.innerHTML = "";
+
+        const li = document.createElement("li");
+        li.textContent = `📄 ${data.archive}`;
+        li.style.marginBottom = "4px";
+        li.style.color = "orange";
+        li.style.fontFamily = "monospace";
+        li.style.fontSize = "16px";
+        list.appendChild(li);
+
+        modal.style.display = "block";
+
+        confirmBtn.onclick = () => {
+          modal.style.display = "none";
+          statusBox.innerText = "⏳ Archiving in progress...";
+
+          fetch(archiveEndpoint)
+            .then(res => res.text())
+            .then(msg => {
+              statusBox.innerText = msg;
+              archiveButton.disabled = false;
+              loadarchiveHistory();
+
+              // 🔄 Reset form fields
+              document.getElementById("inputFile").value = "";
+              document.getElementById("outputDir").value = "";
+              document.getElementById("archivePassword").value = "";
+              document.getElementById("archiveName").value = "archive";
+              document.getElementById("archiveFormat").value = "7z";
+              document.getElementById("fileCountDisplay").textContent = "";
+              document.getElementById("selectedTags").innerHTML = "";
+              document.getElementById("togglePasswordWrapper").style.display = "none";
+              updatePasswordVisibility();
+            })
+            .catch(err => {
+              console.error("Archiving error:", err);
+              statusBox.innerText = "❌ Archiving failed.";
+              archiveButton.disabled = false;
+            });
+        };
+
+        cancelBtn.onclick = () => {
+          modal.style.display = "none";
+          statusBox.innerText = "❌ Archiving canceled.";
+          archiveButton.disabled = false;
+        };
+
+      } else {
+        statusBox.innerText = "⏳ Archiving in progress...";
+
+        fetch(archiveEndpoint)
+          .then(res => res.text())
+          .then(msg => {
+            statusBox.innerText = msg;
+            archiveButton.disabled = false;
+            loadarchiveHistory();
+
+            // 🔄 Reset form fields
+            document.getElementById("inputFile").value = "";
+            document.getElementById("outputDir").value = "";
+            document.getElementById("archivePassword").value = "";
+            document.getElementById("archiveName").value = "archive";
+            document.getElementById("archiveFormat").value = "7z";
+            document.getElementById("fileCountDisplay").textContent = "";
+            document.getElementById("selectedTags").innerHTML = "";
+            document.getElementById("togglePasswordWrapper").style.display = "none";
+            updatePasswordVisibility();
+          })
+          .catch(err => {
+            console.error("Archiving error:", err);
+            statusBox.innerText = "❌ Archiving failed.";
+            archiveButton.disabled = false;
+          });
+      }
+    })
+    .catch(err => {
+      console.error("Overwrite check error:", err);
+      statusBox.innerText = "❌ Could not check for existing archive.";
+      archiveButton.disabled = false;
+    });
+}
+
+// Auto-pulse #statusBox when content updates
+const statusBox = document.getElementById("statusBox");
+const observer = new MutationObserver(() => {
+  statusBox.classList.remove("animate-pulse");
+  void statusBox.offsetWidth;
+  statusBox.classList.add("animate-pulse");
+});
+observer.observe(statusBox, { childList: true, characterData: true, subtree: true });
+
+function loadarchiveHistory() {
+  fetch("/plugins/zip_manager/helpers/get_archive_history.php")
+    .then(res => res.text())
+    .then(data => {
+      document.getElementById("archiveLogBox").innerText = data;
+    })
+    .catch(() => {
+      document.getElementById("archiveLogBox").innerText = "❌ Failed to load history.";
+    });
+}
+
+const formatSelect = document.getElementById("archiveFormat");
+const passwordField = document.getElementById("passwordField");
+const passwordInput = document.getElementById("archivePassword");
+
+function updatePasswordVisibility() {
+  const selected = formatSelect.value;
+  const requiresPassword = selected === "7z" || selected === "rar";
+
+  if (requiresPassword) {
+    passwordField.classList.remove("hidden");
+  } else {
+    passwordInput.value = "";
+    passwordField.classList.add("hidden");
+  }
+}
+
+// ✅ Run on initial page load
+updatePasswordVisibility();
+
+// ✅ Run every time the format changes
+formatSelect.addEventListener("change", updatePasswordVisibility);
+
+// Call it once on page load
+loadarchiveHistory();
+
+document.addEventListener("DOMContentLoaded", () => {
+  const passwordInput = document.getElementById("archivePassword");
+  const toggleWrapper = document.getElementById("togglePasswordWrapper");
+
+  if (passwordInput && toggleWrapper) {
+    passwordInput.addEventListener("input", () => {
+      toggleWrapper.style.display = passwordInput.value ? "inline" : "none";
+    });
+  }
+});
 </script>

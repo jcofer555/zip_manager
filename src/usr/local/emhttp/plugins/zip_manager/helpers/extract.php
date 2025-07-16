@@ -3,8 +3,8 @@ $input = $_GET['input'] ?? '';
 $output = $_GET['output'] ?? '';
 $password = $_GET['password'] ?? '';
 $passArg = $password ? "-p" . escapeshellarg($password) : "";
-$maxSizeBytes = 500 * 1024 * 1024; // 500 MB limit
 $logFile = '/boot/config/plugins/zip_manager/logs/extractor_debug.log';
+$logFile2 = '/boot/config/plugins/zip_manager/logs/extractor_history.log';
 
 // Always overwrite log with the last run only
 function overwriteLog(string $logFile, string $newLogContent): void {
@@ -87,7 +87,7 @@ function applyOwnershipAndPermissionsFromBA(
 
 // Validate input/output
 if (!file_exists($input)) {
-    echo "❌ Archive not found.";
+    echo "❌ Archive file not found.";
     exit;
 }
 
@@ -110,39 +110,6 @@ foreach ($testOutput as $line) {
         $isEncrypted = true;
         break;
     }
-}
-
-// Step 1: Pre-check archive content size
-$listCmd = "/usr/bin/7zzs l -slt " . escapeshellarg($input);
-if (!empty($password)) {
-    $listCmd .= " -p" . escapeshellarg($password);
-}
-
-exec($listCmd . " 2>&1", $listOutput, $listExitCode);
-
-$outputStr = implode("\n", $listOutput);
-if (strpos($outputStr, 'Wrong password') !== false || strpos($outputStr, 'Enter password') !== false) {
-    echo "❌ Check or enter your password.";
-    exit;
-}
-
-if ($listExitCode !== 0) {
-    echo "❌ Failed to read archive. Possibly corrupted or encrypted.";
-    exit;
-}
-
-// Step 2: Parse and sum file sizes
-$totalSize = 0;
-foreach ($listOutput as $line) {
-    if (preg_match('/^Size = (\d+)/', $line, $matches)) {
-        $totalSize += (int)$matches[1];
-    }
-}
-
-if ($totalSize > $maxSizeBytes) {
-    $mb = round($totalSize / (1024 * 1024), 2);
-    echo "❌ Archive uncompressed size is ${mb} MB — exceeds 500 MB limit. Extraction aborted.";
-    exit;
 }
 
 // Step 2.5: Detect overwrite conflicts
@@ -194,9 +161,9 @@ if ($extractExitCode !== 0) {
 
 echo "✅ Extraction completed.";
 
-$logFile2 = '/boot/config/plugins/zip_manager/logs/extractor_history.log';
 $timestamp = date("Y-m-d H:i:s");
-$entry = "[$timestamp] $input -> $output";
+$status = ($extractExitCode === 0) ? "✅ Success:" : "❌ Failure:";
+$entry = "[$timestamp] $status $input -> $output";
 
 // Read existing log (if any), keep max 9 previous entries
 $existing = file_exists($logFile2) ? file($logFile2, FILE_IGNORE_NEW_LINES) : [];
@@ -218,7 +185,10 @@ $chownChmodLogs = applyOwnershipAndPermissionsFromBA(
 // Step 5: Log entire session
 $inputFile = realpath($input) ?: $input;
 
-$logRunContent = "=== Extraction for {$inputFile} started ===\n";
+$logRunContent = "=== Extraction started ===\n";
+$logRunContent .= "⏰ Timestamp: $timestamp\n";
+$logRunContent .= "📦 Input: $input\n";
+$logRunContent .= "📤 Output: $output\n";
 $logRunContent .= $isEncrypted ? "🔐 Archive is encrypted.\n\n" : "✅ Archive is not encrypted.\n\n";
 $logRunContent .= "📁 Conflict check:\n";
 if (count($conflicts)) {
@@ -230,6 +200,6 @@ $logRunContent .= "🔧 Extraction command:\n$extractCmd\n\n";
 $logRunContent .= "📥 Extraction output:\n$extractOutputStr\n\n";
 $logRunContent .= "🔚 Extraction exit code: $extractExitCode\n\n";
 $logRunContent .= implode("\n", $chownChmodLogs) . "\n";
-$logRunContent .= "=== Extraction for {$inputFile} ended ===";
+$logRunContent .= "=== Extraction ended ===";
 
 overwriteLog($logFile, $logRunContent);

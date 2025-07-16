@@ -40,17 +40,16 @@ if (!is_dir($logDir)) {
 
 #pickerModal {
   display: none;
+  position: relative;
   background: #111111;
   border: 1px solid orange;
   padding: 12px;
   color: orange;
   font-family: monospace;
   font-size: 16px;
-  max-width: 448px;
-  max-height: 200px;
+  width: 448px;
+  max-height: 220px;
   overflow-y: auto;
-  box-shadow: none;
-  position: relative;
 }
 
 #breadcrumb {
@@ -214,6 +213,26 @@ body {
   box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4); /* orange glow */
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
+
+.input-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+#fileCountDisplay {
+  position: absolute;
+  top: 50%;
+  left: 100%; /* anchor to the right of the input field */
+  transform: translateY(-50%);
+  width: 275px; /* fixed width to prevent shifting */
+  font-family: monospace;
+  color: orange;
+  font-size: 16px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>
 
 <?php
@@ -222,12 +241,11 @@ $csrfToken = $_GET['csrf_token'] ?? ''; // Or retrieve from session if needed
 $archiverUrl = "/Settings/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($csrfToken) : '');
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.1em;">
-  <h2 style="margin: 0;">📦 Extract archive using 7-zip</h2>
+<div style="display: flex; justify-content: end; align-items: flex-start; margin-bottom: 0.1em;">
 
   <!-- Button container -->
   <div style="display: flex; flex-direction: row; gap: 0.5em; align-items: flex-start; margin-left: 1em;">
-    <!-- Extractor Page -->
+    <!-- Archiver Page -->
     <form action="<?= htmlspecialchars($archiverUrl) ?>" method="get" style="margin: 0;">
       <input type="submit" value="📤 Archiver Page" style="margin-top: 0.1em;">
     </form>
@@ -417,85 +435,94 @@ if ($filename === 'extractor_debug.log') {
   </div>
 </div>
 
-<div>
-  <div class="field-row">
-    <label for="inputFile">Archive File:</label>
-    <input type="text" id="inputFile" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Click to browse" readonly onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
+<div style="position: relative;">
+  <!-- 🧩 Left: Extraction Form -->
+  <div style="max-width: 640px;">
+    <h2 style="margin: 0; margin-bottom: 8px;">📦 Extract archive using 7-zip</h2>
+
+    <!-- 📁 Picker Modal -->
+     <div style="position: relative;">
+    <div id="pickerModal" style="display: none;">
+      <div id="breadcrumb"></div>
+      <ul id="fileList"></ul>
+      <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8;">* Double-click to select a folder</div>
+    </div>
   </div>
+    <br>
+
+    <!-- ⚠️ Overwrite Modal -->
+    <div id="overwriteModal" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; font-size: 16px; padding: 12px; color: orange; max-width: 448px;">
+      <div id="overwriteHeader" style="font-weight: bold; margin-bottom: 8px; color: white;">⚠️ The following files may be overwritten:</div>
+      <ul id="overwriteList" style="max-height: 200px; list-style: none; overflow-y: auto; padding-left: 18px;"></ul>
+      <div style="margin-top: 12px;">
+        <button id="overwriteConfirm" style="margin-right: 8px;">✅ Continue</button>
+        <button id="overwriteCancel">❌ Cancel</button>
+      </div>
+    </div>
+  </div>
+  <br>
+
+<div class="field-row">
+  <label for="inputFile">Archive file:</label>
+  <div class="input-wrapper">
+    <input type="text" id="inputFile" class="highlight-input"
+      placeholder="Click to browse" readonly
+      onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
+    <span id="fileCountDisplay"></span>
+  </div>
+</div>
 
 <div class="field-row" id="passwordRow">
-  <label for="archivePassword">Password:</label>
-  <input type="password" id="archivePassword" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Required for encrypted archives" />
-  <label style="color: orange; font-size: 0.9em; cursor: pointer;">
-    <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
-    Show
-  </label>
-</div>
-
-  <div class="field-row">
-    <label for="outputDir">Output Directory:</label>
-    <input type="text" id="outputDir" class="highlight-input" style="background-color: #111111; color: orange;" placeholder="Click to browse" readonly onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
-  </div>
-
-  <button onclick="runExtraction()">🚀 Extract</button>
-  <button onclick="listArchiveContents()">📄 List Contents</button>
-  <button onclick="clearForm()">🧹 Clear Form</button>
-  <br/><br/>
-  <div id="statusBox"></div>
-</div>
-
-<!-- Modal Picker -->
-<div id="pickerModal" style="display:none;">
-  <div id="breadcrumb"></div>
-  <ul id="fileList"></ul>
-  <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8; display: none;">
-    * Double-click to select a folder
+  <label for="archivePassword">Archive password:</label>
+  <div class="input-wrapper">
+    <input type="password" id="archivePassword" class="highlight-input"
+      placeholder="Required for encrypted archives" />
+    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
+      <label style="color: orange; font-size: 16px; cursor: pointer;">
+        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
+        Show
+      </label>
+    </span>
   </div>
 </div>
 
-<div id="listOutput" style="
-  display: none;
-  margin-top: 12px;
-  background: #111111;
-  border: 1px solid orange;
-  padding: 12px;
-  max-height: 200px;
-  overflow-y: auto;
-  position: relative;
-  font-family: monospace;
-  font-size: 16px;
-  color: orange;
-">
-</div>
+    <div class="field-row">
+      <label for="outputDir">Output directory:</label>
+      <input type="text" id="outputDir" class="highlight-input" placeholder="Click to browse" readonly onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+    </div>
 
-<div id="overwriteModal" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; font-size: 16px; padding: 12px; color: orange; max-width: 448px;">
-  <div id="overwriteHeader" style="font-weight: bold; margin-bottom: 8px; color: white;">⚠️ The following files may be overwritten:</div>
-  <ul id="overwriteList" style="max-height: 200px; list-style: none; overflow-y: auto; padding-left: 18px;"></ul>
-  <div style="margin-top: 12px;">
-    <button id="overwriteConfirm" style="margin-right: 8px;">✅ Continue</button>
-    <button id="overwriteCancel">❌ Cancel</button>
-  </div>
-</div>
+    <button onclick="runExtraction()">🚀 Extract</button>
+    <button onclick="listArchiveContents()">📄 List Contents</button>
+    <button onclick="clearForm()">🧹 Clear Form</button>
+    <br/><br/>
+    <div id="statusBox"></div>
 
-<div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-top: 30px;">
-  <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
-  <h2 style="margin: 0;">📜 Extraction history</h2>
-</div>
+    <!-- 📋 List Contents Output -->
+    <div id="listOutput" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; padding: 12px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 16px; color: orange;"></div>
 
-<div id="historyContainer" style="margin-top: 10px;">
-  <div id="extractLogBox" style="color: lightgray; padding: 10px; max-height: 200px; overflow-y: auto; background: none; border: none;"></div>
-  <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;"></div>
-</div>
-<br>
-<button onclick="clearExtractHistory()" style="margin-top: 8px;">🧹 Clear History</button>
+  <!-- 📜 Right: Floating Extraction History -->
+  <div style="position: absolute; top: 6px; right: 200px; width: 800px;">
+    <div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-bottom: 8px;">
+      <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
+      <h2 style="margin: 0;">📜 Extraction history</h2>
+    </div>
 
-<!-- Clear History Modal -->
-<div id="clearHistoryModal" style="display:none; margin-top:12px; background:#2a2a2a; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
-  <div style="font-weight:bold; margin-bottom:8px;">⚠️ Clear extraction history?</div>
-  <div>This will remove all previous extraction records. This cannot be undone.</div>
-  <div style="margin-top:12px;">
-    <button id="clearHistoryConfirm" style="margin-right:8px;">✅ Yes, Clear</button>
-    <button id="clearHistoryCancel">❌ Cancel</button>
+    <div id="historyContainer" style="margin-top: 10px;">
+      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 950px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No extraction history!</div>
+    </div>
+
+    <button onclick="clearExtractHistory()" style="margin-top: 12px;">🧹 Clear History</button>
+
+    <!-- 🧨 Clear History Modal -->
+    <div id="clearHistoryModal" style="display:none; margin-top:12px; background:#111111; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
+      <div style="font-weight:bold; margin-bottom:8px;">⚠️ Clear extraction history?</div>
+      <div>This will remove all previous extraction records. This cannot be undone.</div>
+      <div style="margin-top:12px;">
+        <button id="clearHistoryConfirm" style="margin-right:8px;">✅ Yes, Clear</button>
+        <button id="clearHistoryCancel">❌ Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -588,16 +615,19 @@ function listArchiveContents() {
   outputBox.innerHTML = "<div style='color: orange;'>🔄 Listing archive contents...</div>";
 
   fetch(`/plugins/zip_manager/helpers/list_archive_contents.php?input=${encodeURIComponent(input)}&password=${encodeURIComponent(password)}`)
-    .then(res => res.text())
+    .then(res => {
+      if (!res.ok) throw new Error("Archive listing failed");
+      return res.text();
+    })
     .then(output => {
       const lines = output.trim().split(/\r?\n/);
 
-let listHTML = `
-  <div style="font-weight: bold; margin-bottom: 8px; color: white;">
-    🗜️ Archive contents:
-  </div>
-  <ul style="padding-left: 18px; list-style: none; margin: 0; color: orange;">
-`;
+      let listHTML = `
+        <div style="font-weight: bold; margin-bottom: 8px; color: white;">
+          🗜️ Archive contents:
+        </div>
+        <ul style="padding-left: 18px; list-style: none; margin: 0; color: orange;">
+      `;
 
       lines.forEach(line => {
         if (!line) return;
@@ -617,8 +647,21 @@ let listHTML = `
       outputBox.innerHTML = listHTML;
     })
     .catch(err => {
-      outputBox.innerHTML = "<div style='color: orange;'>❌ Error listing archive contents.</div>";
-      console.error(err);
+      outputBox.innerHTML = "<div style='color: orange;'>❌ Check or enter your password.</div>";
+
+      // 👇 Optional glow effect on the password field for visual feedback
+      const pwdInput = document.getElementById("archivePassword");
+      if (pwdInput) {
+        pwdInput.classList.add("shake");
+        pwdInput.style.boxShadow = "0 0 6px 2px rgba(255, 0, 0, 0.5)";
+
+        setTimeout(() => {
+          pwdInput.classList.remove("shake");
+          pwdInput.style.boxShadow = "";
+        }, 600);
+      }
+
+      console.error("List error:", err);
     });
 }
 
@@ -648,9 +691,9 @@ let currentIsDir = null;
 let currentPath = null;
 
 function openPicker(targetId, isDir, path = "/mnt/") {
-  document.getElementById("statusBox").innerText = "";  // Clear status message
-  document.getElementById("listOutput").style.display = "none";  // 👈 Clear list contents
-  document.getElementById("listOutput").innerText = "";          // 👈 Clear list contents
+  document.getElementById("statusBox").innerText = "";
+  document.getElementById("listOutput").style.display = "none";
+  document.getElementById("listOutput").innerText = "";
   if (isModalLocked) return;
 
   currentTargetId = targetId;
@@ -658,7 +701,6 @@ function openPicker(targetId, isDir, path = "/mnt/") {
   currentPath = path;
 
   document.getElementById("pickerMessage").style.display = isDir ? "block" : "none";
-
   updateBreadcrumb(path);
 
   fetch(`/plugins/zip_manager/helpers/list_files.php?dir=${encodeURIComponent(path)}`)
@@ -672,178 +714,183 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       const ul = document.getElementById("fileList");
       ul.innerHTML = "";
 
-// Add "Up one directory" if not already at root "/mnt/"
-if (path !== "/mnt/") {
-  const liUp = document.createElement("li");
-  const spanUp = document.createElement("span");
-  spanUp.textContent = "⬆️ Parent Directory";
-  spanUp.style.color = "orange";
-  spanUp.style.padding = "4px 8px";
-  spanUp.style.cursor = "pointer";
-  spanUp.title = "Go to parent directory";
-  spanUp.addEventListener("click", () => {
-    // Compute parent path by removing trailing slash and last segment
-    let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
-    parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
-    openPicker(targetId, isDir, parentPath);
-  });
-  liUp.appendChild(spanUp);
-  ul.appendChild(liUp);
-}
-
-function formatSize(bytes) {
-  if (bytes >= 1 << 30) return (bytes / (1 << 30)).toFixed(2) + " GB";
-  if (bytes >= 1 << 20) return (bytes / (1 << 20)).toFixed(2) + " MB";
-  if (bytes >= 1 << 10) return (bytes / (1 << 10)).toFixed(2) + " KB";
-  return bytes + " B";
-}
-
-    const skipFolders = ['user0/', 'addons/', 'rootshare/'];
-    const filteredItems = items
-      .filter(item => !skipFolders.includes(item.name))
-      .sort((a, b) => {
-    const aFolder = a.name.endsWith("/");
-    const bFolder = b.name.endsWith("/");
-    if (aFolder && !bFolder) return -1;
-    if (!aFolder && bFolder) return 1;
-    return a.name.localeCompare(b.name);
-  });
-
-if (disallowedBaseFolders.length === 0 && path === "/mnt/") {
-  disallowedBaseFolders = filteredItems
-    .filter(item => item.name.endsWith("/"))
-    .map(item => path + item.name);
-}
-
-// Sort and split supported vs unsupported files
-const allowedExtensions = [
-  '7z','zip','rar','tar','gz','bz2','xz','lzma','z','cab','arj','iso','udf',
-  'wim','dmg','vhd','vmdk','msi','deb','rpm','cpio','chm','nsis','exe',
-  'tar.gz','tar.bz2','tar.xz','tar.zst','lzh','lha','ace','zst','img'
-];
-
-const folders = [];
-const supportedFiles = [];
-const unsupportedFiles = [];
-
-filteredItems.forEach(item => {
-  const name = item.name;
-  const size = item.size;
-  const fullPath = path + name;
-  const isFolder = name.endsWith("/");
-
-  if (isFolder) {
-    folders.push({ name, size, fullPath });
-  } else {
-    const lower = name.toLowerCase();
-    const isValid = allowedExtensions.some(ext => lower.endsWith(`.${ext}`));
-    const entry = { name, size, fullPath };
-    if (isValid) supportedFiles.push(entry);
-    else unsupportedFiles.push(entry);
-  }
-});
-
-// Append folders
-folders.forEach(entry => {
-  const li = document.createElement("li");
-  const span = document.createElement("span");
-  span.textContent = `📁 ${entry.name}`;
-  span.style.color = "orange";
-  span.style.padding = "4px 8px";
-  span.style.cursor = "pointer";
-  span.title = "Double-click to select this folder";
-
-  const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
-  if (isDisallowed) {
-    span.title = "Can't be selected";
-    span.style.cursor = "default";
-  }
-
-  span.onmouseenter = () => span.style.textDecoration = "underline";
-  span.onmouseleave = () => span.style.textDecoration = "none";
-
-  span.addEventListener("click", (e) => {
-    if (e.detail > 1) return;
-    clickTimer = setTimeout(() => {
-      openPicker(targetId, isDir, entry.fullPath);
-    }, 200);
-  });
-
-  span.addEventListener("dblclick", () => {
-    clearTimeout(clickTimer);
-    if (isDir) {
-      if (isDisallowed) {
-        shakeModal();
-        return;
-      }
-      document.getElementById(targetId).value = entry.fullPath;
-      closeModal();
-    }
-  });
-
-  li.appendChild(span);
-  ul.appendChild(li);
-});
-
-// Function to render files
-function renderFile(entry, isDisabled = false) {
-  const li = document.createElement("li");
-  const span = document.createElement("span");
-  const fileSizeStr = entry.size > 0 ? ` (${formatBytes(entry.size)})` : "";
-  span.textContent = `📄 ${entry.name}${fileSizeStr}`;
-  span.style.padding = "4px 8px";
-  span.style.color = isDisabled ? "gray" : "orange";
-  span.style.textDecoration = isDisabled ? "line-through" : "none";
-  span.style.cursor = isDisabled ? "not-allowed" : "pointer";
-  span.title = isDisabled ? "Unsupported file format" : "Click to select this file";
-
-  if (!isDisabled) {
-    span.addEventListener("mouseenter", () => span.style.textDecoration = "underline");
-    span.addEventListener("mouseleave", () => span.style.textDecoration = "none");
-
-  span.addEventListener("click", (e) => {
-  if (e.detail > 1) return;
-  clickTimer = setTimeout(() => {
-    document.getElementById(targetId).value = entry.fullPath;
-
-    // 🔐 Check encryption if selecting an archive
-    if (targetId === "inputFile") {
-      fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(entry.fullPath)}`)
-        .then(res => res.json())
-        .then(data => {
-          console.log("Encryption check:", data);
-          document.getElementById("archivePassword").value = "";
-          const passwordRow = document.getElementById("passwordRow");
-          passwordRow.style.display = data.encrypted ? "flex" : "none";
-        })
-        .catch(err => {
-          console.error("Encryption check failed:", err);
+      if (path !== "/mnt/") {
+        const liUp = document.createElement("li");
+        const spanUp = document.createElement("span");
+        spanUp.textContent = "⬆️ Parent Directory";
+        spanUp.style.color = "orange";
+        spanUp.style.padding = "4px 8px";
+        spanUp.style.cursor = "pointer";
+        spanUp.title = "Go to parent directory";
+        spanUp.addEventListener("click", () => {
+          let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
+          parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
+          openPicker(targetId, isDir, parentPath);
         });
-    }
+        liUp.appendChild(spanUp);
+        ul.appendChild(liUp);
+      }
 
-    closeModal();
-  }, 300);
-});
+      function formatSize(bytes) {
+        if (bytes >= 1 << 30) return (bytes / (1 << 30)).toFixed(2) + " GB";
+        if (bytes >= 1 << 20) return (bytes / (1 << 20)).toFixed(2) + " MB";
+        if (bytes >= 1 << 10) return (bytes / (1 << 10)).toFixed(2) + " KB";
+        return bytes + " B";
+      }
 
-    span.addEventListener("dblclick", () => {
-      clearTimeout(clickTimer);
-      document.getElementById(targetId).value = entry.fullPath;
-      closeModal();
-    });
-  }
+      const skipFolders = ['user0/', 'addons/', 'rootshare/'];
+      const filteredItems = items
+        .filter(item => !skipFolders.includes(item.name))
+        .sort((a, b) => {
+          const aFolder = a.name.endsWith("/");
+          const bFolder = b.name.endsWith("/");
+          if (aFolder && !bFolder) return -1;
+          if (!aFolder && bFolder) return 1;
+          return a.name.localeCompare(b.name);
+        });
 
-  li.appendChild(span);
-  ul.appendChild(li);
-}
+      if (disallowedBaseFolders.length === 0 && path === "/mnt/") {
+        disallowedBaseFolders = filteredItems
+          .filter(item => item.name.endsWith("/"))
+          .map(item => path + item.name);
+      }
 
-// Only show files if selecting a file, not a folder
-if (!isDir) {
-  // Append supported files
-  supportedFiles.forEach(file => renderFile(file));
+      const allowedExtensions = [
+        '7z','zip','rar','tar','gz','bz2','xz','lzma','z','cab','arj','iso','udf',
+        'wim','dmg','vhd','vmdk','msi','deb','rpm','cpio','chm','nsis','exe',
+        'tar.gz','tar.bz2','tar.xz','tar.zst','lzh','lha','ace','zst','img'
+      ];
 
-  // Append unsupported files at the bottom
-  unsupportedFiles.forEach(file => renderFile(file, true));
-}
+      const folders = [];
+      const supportedFiles = [];
+      const unsupportedFiles = [];
+
+      filteredItems.forEach(item => {
+        const name = item.name;
+        const size = item.size;
+        const fullPath = path + name;
+        const isFolder = name.endsWith("/");
+
+        if (isFolder) {
+          folders.push({ name, size, fullPath });
+        } else {
+          const lower = name.toLowerCase();
+          const isValid = allowedExtensions.some(ext => lower.endsWith(`.${ext}`));
+          const entry = { name, size, fullPath };
+          if (isValid) supportedFiles.push(entry);
+          else unsupportedFiles.push(entry);
+        }
+      });
+
+      folders.forEach(entry => {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = `📁 ${entry.name}`;
+        span.style.color = "orange";
+        span.style.padding = "4px 8px";
+        span.style.cursor = "pointer";
+
+        const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
+        if (isDisallowed) {
+          span.title = "Can't be selected";
+          span.style.cursor = "default";
+        }
+
+        span.onmouseenter = () => span.style.textDecoration = "underline";
+        span.onmouseleave = () => span.style.textDecoration = "none";
+
+        span.addEventListener("click", (e) => {
+          if (e.detail > 1) return;
+          clickTimer = setTimeout(() => {
+            openPicker(targetId, isDir, entry.fullPath);
+          }, 200);
+        });
+
+        span.addEventListener("dblclick", () => {
+          clearTimeout(clickTimer);
+          if (isDir) {
+            if (isDisallowed) {
+              shakeModal();
+              return;
+            }
+            document.getElementById(targetId).value = entry.fullPath;
+            closeModal();
+          }
+        });
+
+        li.appendChild(span);
+        ul.appendChild(li);
+      });
+
+      function renderFile(entry, isDisabled = false) {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        const fileSizeStr = entry.size > 0 ? ` (${formatSize(entry.size)})` : "";
+        span.textContent = `📄 ${entry.name}${fileSizeStr}`;
+        span.style.padding = "4px 8px";
+        span.style.color = isDisabled ? "gray" : "orange";
+        span.style.textDecoration = isDisabled ? "line-through" : "none";
+        span.style.cursor = isDisabled ? "not-allowed" : "pointer";
+        span.title = isDisabled ? "Unsupported file format" : "Click to select this file";
+
+        if (!isDisabled) {
+          span.addEventListener("mouseenter", () => span.style.textDecoration = "underline");
+          span.addEventListener("mouseleave", () => span.style.textDecoration = "none");
+
+          span.addEventListener("click", (e) => {
+            if (e.detail > 1) return;
+            clickTimer = setTimeout(() => {
+              document.getElementById(targetId).value = entry.fullPath;
+
+              // ✅ Show size for Extractor field
+              if (targetId === "inputFile") {
+                const displaySpan = document.getElementById("fileCountDisplay");
+                displaySpan.textContent = entry.size > 0
+                  ? `💾 ${formatSize(entry.size)}`
+                  : "";
+              }
+
+              if (targetId === "inputFile") {
+                fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(entry.fullPath)}`)
+                  .then(res => res.json())
+                  .then(data => {
+                    console.log("Encryption check:", data);
+                    document.getElementById("archivePassword").value = "";
+                    const passwordRow = document.getElementById("passwordRow");
+                    passwordRow.style.display = data.encrypted ? "flex" : "none";
+                  })
+                  .catch(err => {
+                    console.error("Encryption check failed:", err);
+                  });
+              }
+
+              closeModal();
+            }, 300);
+          });
+
+          span.addEventListener("dblclick", () => {
+            clearTimeout(clickTimer);
+            document.getElementById(targetId).value = entry.fullPath;
+
+            if (targetId === "inputFile") {
+              const displaySpan = document.getElementById("fileCountDisplay");
+              displaySpan.textContent = entry.size > 0
+                ? `💾 ${formatSize(entry.size)}`
+                : "";
+            }
+
+            closeModal();
+          });
+        }
+
+        li.appendChild(span);
+        ul.appendChild(li);
+      }
+
+      if (!isDir) {
+        supportedFiles.forEach(file => renderFile(file));
+        unsupportedFiles.forEach(file => renderFile(file, true));
+      }
 
       document.getElementById("pickerModal").style.display = "block";
     });
@@ -914,6 +961,7 @@ function clearForm() {
 
   // Hide password input
   document.getElementById("passwordRow").style.display = "none";
+  document.getElementById("togglePasswordWrapper").style.display = "none";
 
   // Clear messages
   document.getElementById("statusBox").innerText = "";
@@ -927,6 +975,8 @@ function clearForm() {
   // ✅ Re-enable extract button
   const extractButton = document.querySelector("button[onclick='runExtraction()']");
   if (extractButton) extractButton.disabled = false;
+
+  window.location.href = window.location.href;
 }
 
 function runExtraction() {
@@ -941,39 +991,34 @@ function runExtraction() {
   const confirmBtn = document.getElementById("overwriteConfirm");
   const cancelBtn = document.getElementById("overwriteCancel");
 
-  // Clear previous output
   document.getElementById("listOutput").style.display = "none";
   document.getElementById("listOutput").innerText = "";
   statusBox.innerText = "";
 
   if (!input || !output) {
-    statusBox.innerText = "❌ Please select both input and output.";
+    statusBox.innerText = "❌ Please select both archive file and output directory.";
     return;
   }
 
-  // Show initial progress message
   statusBox.innerText = "⏳ Checking for overwrite conflicts...";
   extractButton.disabled = true;
 
-  const checkEndpoint = `/plugins/zip_manager/helpers/check_overwrites.php?input=${encodeURIComponent(input)}&output=${encodeURIComponent(output)}&password=${encodeURIComponent(password)}`;
+  const checkEndpoint = `/plugins/zip_manager/helpers/check_extract_overwrites.php?input=${encodeURIComponent(input)}&output=${encodeURIComponent(output)}&password=${encodeURIComponent(password)}`;
   const extractEndpoint = `/plugins/zip_manager/helpers/extract.php?input=${encodeURIComponent(input)}&output=${encodeURIComponent(output)}&password=${encodeURIComponent(password)}`;
 
   fetch(checkEndpoint)
     .then(res => res.json())
     .then(data => {
       if (data.conflicts && data.conflicts.length > 0) {
-        // Conflicts found - show modal with styled list
         statusBox.innerText = "";
         list.innerHTML = "";
 
         data.conflicts.forEach(name => {
           const segments = name.trim().split('/');
           const lastSegment = segments[segments.length - 1];
-
           const isNumericVersionFolder = /^[\d.]+$/.test(lastSegment);
           const hasExtension = /\.[^\/]+$/.test(lastSegment);
           const isLikelyFolder = !hasExtension || isNumericVersionFolder;
-
           const icon = isLikelyFolder ? "📁" : "📄";
 
           const li = document.createElement("li");
@@ -987,7 +1032,6 @@ function runExtraction() {
 
         modal.style.display = "block";
 
-        // Confirm extraction handler
         confirmBtn.onclick = () => {
           modal.style.display = "none";
           statusBox.innerText = "⏳ Extraction in progress...";
@@ -998,6 +1042,14 @@ function runExtraction() {
               extractButton.disabled = false;
               document.getElementById("archivePassword").value = "";
               loadExtractHistory();
+
+              // 🧹 Clear fields after extraction
+              document.getElementById("inputFile").value = "";
+              document.getElementById("archivePassword").value = "";
+              document.getElementById("outputDir").value = "";
+              document.getElementById("passwordRow").style.display = "none";
+              document.getElementById("togglePasswordWrapper").style.display = "none";
+              document.getElementById("fileCountDisplay").textContent = "";
             })
             .catch(err => {
               console.error("Extraction error:", err);
@@ -1006,7 +1058,6 @@ function runExtraction() {
             });
         };
 
-        // Cancel extraction handler
         cancelBtn.onclick = () => {
           modal.style.display = "none";
           statusBox.innerText = "❌ Extraction canceled.";
@@ -1014,7 +1065,6 @@ function runExtraction() {
         };
 
       } else {
-        // No conflicts - extract immediately
         statusBox.innerText = "⏳ Extraction in progress...";
         fetch(extractEndpoint)
           .then(res => res.text())
@@ -1023,6 +1073,14 @@ function runExtraction() {
             extractButton.disabled = false;
             document.getElementById("archivePassword").value = "";
             loadExtractHistory();
+
+            // 🧹 Clear fields after extraction
+            document.getElementById("inputFile").value = "";
+            document.getElementById("archivePassword").value = "";
+            document.getElementById("outputDir").value = "";
+            document.getElementById("passwordRow").style.display = "none";
+            document.getElementById("togglePasswordWrapper").style.display = "none";
+            document.getElementById("fileCountDisplay").textContent = "";
           })
           .catch(err => {
             console.error("Extraction error:", err);
@@ -1060,4 +1118,15 @@ function loadExtractHistory() {
 
 // Call it once on page load
 loadExtractHistory();
+
+document.addEventListener("DOMContentLoaded", () => {
+  const passwordInput = document.getElementById("archivePassword");
+  const toggleWrapper = document.getElementById("togglePasswordWrapper");
+
+  if (passwordInput && toggleWrapper) {
+    passwordInput.addEventListener("input", () => {
+      toggleWrapper.style.display = passwordInput.value ? "inline" : "none";
+    });
+  }
+});
 </script>

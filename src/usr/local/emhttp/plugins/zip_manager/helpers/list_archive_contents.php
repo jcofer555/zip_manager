@@ -31,6 +31,7 @@ foreach ($encryptionIndicators as $indicator) {
 
 // Detect wrong password
 if (strpos($lowOutput, 'wrong password') !== false) {
+    http_response_code(403);
     echo "❌ Wrong password.";
     exit;
 }
@@ -50,10 +51,10 @@ foreach ($lines as $line) {
 // Handle empty file list + encryption hint = missing password
 if ($isEncrypted && empty($fileNames)) {
     if (empty($password)) {
+        http_response_code(403);
         echo "❌ Password required for this archive.";
         exit;
     }
-    // else case: wrong password handled above
 }
 
 // Empty archive
