@@ -7,7 +7,7 @@ Easily compress and extract a wide variety of archive formats directly from the 
 
 🗂 Browse and select source files and destination folders via the WebUI
 📦 Extract archives with support for dozens of formats
-📁 Archive folders and files into .7z, .zip, .tar, and .tar.gz formats
+📁 Archive folders and files into .7z, .zip, .tar, .tar.gz, and tar.zst formats
 🔒 Automatically sets correct file ownership and permissions after extraction
 📜 Clean and simple interface under the "Tools" tab
 
