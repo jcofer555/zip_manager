@@ -67,7 +67,9 @@ The 'remove' script.
 removepkg {{ package_name }}
 
 killall 7zzs >/dev/null 2>&1
+killall rar >/dev/null 2>&1
 rm -f /usr/bin/7zzs
+rm -f /usr/bin/rar
 rm -rf /usr/local/emhttp/plugins/{{ name }}
 rm -rf /boot/config/plugins/{{ name }}
 ]]>
