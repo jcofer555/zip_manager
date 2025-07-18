@@ -21,6 +21,7 @@ $archiveName = match ($format) {
   'zip'    => $name . '.zip',
   'tar'    => $name . '.tar',
   'tar.gz' => $name . '.tar.gz',
+  'zstd' => $name . '.tar.zst',
   'rar'    => $name . '.rar',
   default  => $name . '.7z',
 };

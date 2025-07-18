@@ -12,14 +12,7 @@ function overwriteLog(string $logFile, string $newLogContent): void {
     file_put_contents($logFile, $newLogContent);
 }
 
-function applyOwnershipAndPermissionsFromBA(
-    string $archivePath,
-    string $extractRoot,
-    int $uid = 99,
-    int $gid = 100,
-    ?string $logFile = null,
-    string $password = ''
-): array {
+function applyOwnershipAndPermissionsFromBA(string $archivePath, string $extractRoot, int $uid = 99, int $gid = 100, ?string $logFile = null, string $password = ''): array {
     $logs = [];
 
     $listCmd = "/usr/bin/7zzs l -ba " . escapeshellarg($archivePath);
@@ -96,23 +89,25 @@ if (!is_dir($output)) {
     exit;
 }
 
-// Step 0: Check if archive is encrypted (test with wrong password)
-exec("/usr/bin/7zzs t -pwrongpassword " . escapeshellarg($input) . " 2>&1", $testOutput, $testCode);
+// Check if archive is tarball
+$isTarGz  = preg_match('/\.tar\.gz$/i', $input);
+$isTarZst = preg_match('/\.tar\.zst$/i', $input);
+$isTarArchive = $isTarGz || $isTarZst;
 
+$extractCmd = '';
+$tmpTarPath = $isTarArchive ? rtrim($output, '/') . '/decompressed_archive.tar' : null;
+
+// Step 0: Encrypted check
+exec("/usr/bin/7zzs t -pwrongpassword " . escapeshellarg($input) . " 2>&1", $testOutput, $testCode);
 $isEncrypted = false;
 foreach ($testOutput as $line) {
-    if (
-        strpos($line, 'Wrong password') !== false ||
-        strpos($line, 'Can not open encrypted archive') !== false ||
-        strpos($line, 'Errors:') !== false ||
-        strpos($line, "Can't open as archive") !== false
-    ) {
+    if (strpos($line, 'Wrong password') !== false || strpos($line, 'Can not open encrypted archive') !== false || strpos($line, 'Errors:') !== false || strpos($line, "Can't open as archive") !== false) {
         $isEncrypted = true;
         break;
     }
 }
 
-// Step 2.5: Detect overwrite conflicts
+// Step 2.5: Detect conflicts
 exec("/usr/bin/7zzs l $passArg -slt " . escapeshellarg($input), $rawOutput, $code);
 if ($code !== 0) {
   echo json_encode(['error' => 'Failed to read archive contents']);
@@ -137,13 +132,32 @@ foreach ($archiveFiles as $relPath) {
   }
 }
 
-// Step 3: Proceed with extraction
-$extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) .
-              " -o" . escapeshellarg($output) .
-              " -y";
+// Step 3: Decompress tar.gz or tar.zst
+if ($isTarArchive) {
+    if (file_exists($tmpTarPath)) @unlink($tmpTarPath);
 
-if (!empty($password)) {
-    $extractCmd .= " -p" . escapeshellarg($password);
+    if ($isTarGz) {
+        $cmd = "gzip -dc " . escapeshellarg($input) . " > " . escapeshellarg($tmpTarPath);
+    } elseif ($isTarZst) {
+        $cmd = "zstd -d --force -o " . escapeshellarg($tmpTarPath) . " " . escapeshellarg($input);
+    }
+
+    exec($cmd . " 2>&1", $decompressOutput, $decompressExitCode);
+    if ($decompressExitCode !== 0) {
+        echo "❌ Failed to decompress archive.";
+        exit;
+    }
+
+    $extractCmd = "/usr/bin/tar -xf " . escapeshellarg($tmpTarPath) .
+                  " -C " . escapeshellarg($output);
+} else {
+    // Regular archive
+    $extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) .
+                  " -o" . escapeshellarg($output) .
+                  " -y";
+    if (!empty($password)) {
+        $extractCmd .= " -p" . escapeshellarg($password);
+    }
 }
 
 exec($extractCmd . " 2>&1", $extractOutput, $extractExitCode);
@@ -161,45 +175,45 @@ if ($extractExitCode !== 0) {
 
 echo "✅ Extraction completed.";
 
+// Cleanup temp tar
+if ($isTarArchive && file_exists($tmpTarPath)) {
+    @unlink($tmpTarPath);
+}
+
+// Step 4: Log history
 $timestamp = date("Y-m-d H:i:s");
 $status = ($extractExitCode === 0) ? "✅ Success:" : "❌ Failure:";
 $entry = "[$timestamp] $status $input -> $output";
 
-// Read existing log (if any), keep max 9 previous entries
 $existing = file_exists($logFile2) ? file($logFile2, FILE_IGNORE_NEW_LINES) : [];
-$existing = array_slice($existing, -9); // Keep only last 9
-
-$existing[] = $entry; // Add new
+$existing = array_slice($existing, -9);
+$existing[] = $entry;
 file_put_contents($logFile2, implode("\n", $existing) . "\n");
 
-// Step 4: Apply ownership/permissions
-$chownChmodLogs = applyOwnershipAndPermissionsFromBA(
-    $input,
-    $output,
-    99,
-    100,
-    null,
-    $password
-);
+// Step 5: Apply ownership/permissions
+$chownChmodLogs = applyOwnershipAndPermissionsFromBA($input, $output, 99, 100, null, $password);
 
-// Step 5: Log entire session
-$inputFile = realpath($input) ?: $input;
+// Step 6: Write debug log
+$logLines = [];
+$logLines[] = "=== Extraction started ===";
+$logLines[] = "⏰ Timestamp: $timestamp";
+$logLines[] = $input ? "📦 Input: $input" : null;
+$logLines[] = $output ? "📤 Output: $output" : null;
+$logLines[] = $isEncrypted ? "🔐 Archive is encrypted." : "✅ Archive is not encrypted.";
 
-$logRunContent = "=== Extraction started ===\n";
-$logRunContent .= "⏰ Timestamp: $timestamp\n";
-$logRunContent .= "📦 Input: $input\n";
-$logRunContent .= "📤 Output: $output\n";
-$logRunContent .= $isEncrypted ? "🔐 Archive is encrypted.\n\n" : "✅ Archive is not encrypted.\n\n";
-$logRunContent .= "📁 Conflict check:\n";
+$logLines[] = "📁 Conflict check:";
 if (count($conflicts)) {
-    $logRunContent .= "⚠️ Conflicting file(s) detected (" . count($conflicts) . "):\n- " . implode("\n- ", $conflicts) . "\n\n";
+    $logLines[] = "⚠️ Conflicting file(s) detected (" . count($conflicts) . "):\n- " . implode("\n- ", $conflicts);
 } else {
-    $logRunContent .= "✅ No conflicting files detected.\n\n";
+    $logLines[] = "✅ No conflicting files detected.";
 }
-$logRunContent .= "🔧 Extraction command:\n$extractCmd\n\n";
-$logRunContent .= "📥 Extraction output:\n$extractOutputStr\n\n";
-$logRunContent .= "🔚 Extraction exit code: $extractExitCode\n\n";
-$logRunContent .= implode("\n", $chownChmodLogs) . "\n";
-$logRunContent .= "=== Extraction ended ===";
 
+$logLines[] = $extractCmd ? "🔧 Extraction command:\n$extractCmd" : null;
+$logLines[] = $extractOutputStr ? "📥 Extraction output:\n$extractOutputStr" : null;
+$logLines[] = "🔚 Extraction exit code: $extractExitCode";
+$logLines[] = !empty($chownChmodLogs) ? implode("\n", $chownChmodLogs) : null;
+$logLines[] = "=== Extraction ended ===";
+
+$logRunContent = implode("\n\n", array_filter($logLines)) . "\n";
 overwriteLog($logFile, $logRunContent);
+?>

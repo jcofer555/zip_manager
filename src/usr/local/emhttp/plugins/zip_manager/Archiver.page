@@ -519,6 +519,7 @@ if ($filename === 'extractor_debug.log') {
         <option value="zip">zip</option>
         <option value="tar">tar</option>
         <option value="tar.gz">tar.gz</option>
+        <option value="zstd">tar.zst</option>
       </select>
     </div>
 
