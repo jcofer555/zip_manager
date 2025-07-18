@@ -501,14 +501,14 @@ if ($filename === 'extractor_debug.log') {
     <div id="listOutput" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; padding: 12px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 16px; color: orange;"></div>
 
   <!-- 📜 Right: Floating Extraction History -->
-  <div style="position: absolute; top: 6px; right: 200px; width: 800px;">
+  <div style="position: absolute; top: 6px; right: 300px; width: 800px;">
     <div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-bottom: 8px;">
       <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
       <h2 style="margin: 0;">📜 Extraction history</h2>
     </div>
 
     <div id="historyContainer" style="margin-top: 10px;">
-      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 950px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 10900px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
       <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No extraction history!</div>
     </div>
 

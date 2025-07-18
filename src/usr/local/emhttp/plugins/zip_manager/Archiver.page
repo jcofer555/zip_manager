@@ -529,14 +529,14 @@ if ($filename === 'extractor_debug.log') {
     <div id="statusBox"></div>
 
   <!-- 📜 Right: Floating Archiving History -->
-  <div style="position: absolute; top: 6px; right: 200px; width: 800px;">
+  <div style="position: absolute; top: 6px; right: 300px; width: 800px;">
     <div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-bottom: 8px;">
       <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
       <h2 style="margin: 0;">📜 Archiving history</h2>
     </div>
 
     <div id="historyContainer" style="margin-top: 10px;">
-      <div id="archiveLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 950px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="archiveLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1090px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
       <div id="archiveLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No archiving history!</div>
     </div>
 
