@@ -151,12 +151,20 @@ if ($isTarArchive) {
     $extractCmd = "/usr/bin/tar -xf " . escapeshellarg($tmpTarPath) .
                   " -C " . escapeshellarg($output);
 } else {
-    // Regular archive
-    $extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) .
-                  " -o" . escapeshellarg($output) .
-                  " -y";
-    if (!empty($password)) {
-        $extractCmd .= " -p" . escapeshellarg($password);
+    // Check for .rar extension (including .part01.rar or .r00)
+    if (preg_match('/\.rar$/i', $input)) {
+        $extractCmd = "/usr/bin/unrar x -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);
+        if (!empty($password)) {
+            $extractCmd = "/usr/bin/unrar x -p" . escapeshellarg($password) . " -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);
+        }
+    } else {
+        // Regular non-rar archive
+        $extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) .
+                      " -o" . escapeshellarg($output) .
+                      " -y";
+        if (!empty($password)) {
+            $extractCmd .= " -p" . escapeshellarg($password);
+        }
     }
 }
 

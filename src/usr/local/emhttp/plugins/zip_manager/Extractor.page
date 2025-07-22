@@ -438,7 +438,7 @@ if ($filename === 'extractor_debug.log') {
 <div style="position: relative;">
   <!-- 🧩 Left: Extraction Form -->
   <div style="max-width: 640px;">
-    <h2 style="margin: 0; margin-bottom: 8px;">📦 Extract archive using 7-zip</h2>
+    <h2 style="margin: 0; margin-bottom: 8px; color: white;">📦 Extract archive using 7-zip</h2>
 
     <!-- 📁 Picker Modal -->
      <div style="position: relative;">
@@ -508,7 +508,7 @@ if ($filename === 'extractor_debug.log') {
     </div>
 
     <div id="historyContainer" style="margin-top: 10px;">
-      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 10900px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1090px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
       <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No extraction history!</div>
     </div>
 

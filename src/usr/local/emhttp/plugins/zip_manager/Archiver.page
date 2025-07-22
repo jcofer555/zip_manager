@@ -449,7 +449,7 @@ if ($filename === 'extractor_debug.log') {
 <div style="position: relative;">
   <!-- 🧩 Left: Archiving Form -->
   <div style="max-width: 640px;">
-    <h2 style="margin: 0; margin-bottom: 8px;">📦 Create archive using 7-zip</h2>
+    <h2 style="margin: 0; margin-bottom: 8px; color: white;">📦 Create archive using 7-zip</h2>
 
     <!-- 📁 Picker Modal -->
      <div style="position: relative;">
