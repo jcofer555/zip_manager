@@ -18,8 +18,9 @@
 
 ### 2025.07.24
 
-- Added button on extraction page to insert the path the source file lives
-- Added backend logic to prevent the wrong paths like /mnt to be used with frontend workarounds
+- Added button to extraction page to add source path as the output destination
+- Added support for cbz and cbr formats to be extracted
+- Added backend fixes to path detection
 
 ### 2025.07.22.1
 
@@ -43,7 +44,7 @@ For older releases, see https://github.com/jcofer555/zip_manager/releases
 
 <FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.07.24-noarch-1.txz">
 <URL>https://github.com/jcofer555/zip_manager/releases/download/2025.07.24/unraid-zip-manager-2025.07.24-noarch-1.txz</URL>
-<SHA256>a922b1f047a38e1d98037e577528824685bb09da3e738f4d00066cda25ef5a4a</SHA256>
+<SHA256>b1ed262681d01abdd2ee9854949aa0fa7b03aa410bb7eff365a6420a8e971f60</SHA256>
 </FILE>
 
 <!--
