@@ -208,7 +208,7 @@ body {
 }
 
 .highlight-input:focus {
-  background-color: #2a2a2a;
+  background-color: #111111;
   outline: none; /* removes browser default blue border */
   box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4); /* orange glow */
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
@@ -232,6 +232,22 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.btn-orange {
+  background-color: #111111;
+  color: orange;
+  border: 1px solid orange;
+  padding: 6px 10px;
+  font-family: monospace;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-orange:focus {
+  background-color: #111111;
+  box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4);
+  color: white; /* ensures glow + white text on focus */
 }
 </style>
 
@@ -295,10 +311,19 @@ $archiverUrl = "/Settings/Archiver" . ($csrfToken ? "?csrf_token=" . urlencode($
 
 if ($filename === 'archiver_debug.log') {
   $excludedPaths = ['/usr/bin/7zzs'];
+  $excludedMessages = [
+    "Trial version             Type 'rar -?' for help",
+    "Evaluation copy. Please register.",
+  ];
+
   $lines = explode("\n", $content);
   $redactedLines = [];
 
   foreach ($lines as $line) {
+    if (in_array(trim($line), $excludedMessages)) {
+      continue;
+    }
+
     $srcAssigned = false;
     $destAssigned = false;
 
@@ -315,7 +340,6 @@ if ($filename === 'archiver_debug.log') {
       function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
         $path = $match[1];
 
-        // Skip excluded paths
         foreach ($excludedPaths as $excluded) {
           if (strpos($path, $excluded) === 0) {
             return $match[0]; // leave unchanged
@@ -474,14 +498,7 @@ if ($filename === 'extractor_debug.log') {
 
     <!-- ➕ Button Container to the Right of Picker Modal -->
 <div id="addPathContainer" style="display:none; position:flex; top:0; left:460px;">
-  <button id="addPathBtn" style="
-    background-color: #222;
-    color: orange;
-    border: 1px solid orange;
-    padding: 6px 10px;
-    font-family: monospace;
-    cursor: pointer;
-  ">➕ Optional: Add archive file path to destination</button>
+  <button id="addPathBtn" class="btn-orange">Optional: Add path to destination</button>
 </div>
 
 <div class="field-row" id="passwordRow">

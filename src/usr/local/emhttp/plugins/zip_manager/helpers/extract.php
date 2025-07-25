@@ -104,7 +104,6 @@ foreach ($rawOutput as $line) {
 $conflicts = array_filter($archiveFiles, fn($f) => file_exists($output . '/' . $f));
 
 // 🔄 Extraction logic
-$logLines = [];
 if ($isTar) {
     if (file_exists($tmpTarPath)) @unlink($tmpTarPath);
 
@@ -119,7 +118,6 @@ if ($isTar) {
     }
     $extractCmd = "/usr/bin/tar -xf " . escapeshellarg($tmpTarPath) . " -C " . escapeshellarg($output);
 } elseif ($isRarLike) {
-    if (preg_match('/\.cbr$/i', $input)) $logLines[] = "🔄 Treating .cbr as .rar for extraction.";
     $extractCmd = empty($password)
         ? "/usr/bin/unrar x -o+ " . escapeshellarg($input) . " " . escapeshellarg($output)
         : "/usr/bin/unrar x -p" . escapeshellarg($password) . " -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);

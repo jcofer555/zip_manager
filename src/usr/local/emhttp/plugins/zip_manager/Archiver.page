@@ -306,10 +306,19 @@ $extractorUrl = "/Settings/Extractor" . ($csrfToken ? "?csrf_token=" . urlencode
 
 if ($filename === 'archiver_debug.log') {
   $excludedPaths = ['/usr/bin/7zzs'];
+  $excludedMessages = [
+    "Trial version             Type 'rar -?' for help",
+    "Evaluation copy. Please register.",
+  ];
+
   $lines = explode("\n", $content);
   $redactedLines = [];
 
   foreach ($lines as $line) {
+    if (in_array(trim($line), $excludedMessages)) {
+      continue;
+    }
+
     $srcAssigned = false;
     $destAssigned = false;
 
@@ -326,7 +335,6 @@ if ($filename === 'archiver_debug.log') {
       function ($match) use (&$srcAssigned, &$destAssigned, $excludedPaths) {
         $path = $match[1];
 
-        // Skip excluded paths
         foreach ($excludedPaths as $excluded) {
           if (strpos($path, $excluded) === 0) {
             return $match[0]; // leave unchanged

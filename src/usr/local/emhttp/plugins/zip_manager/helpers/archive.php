@@ -218,8 +218,27 @@ if (file_exists($archivePath)) {
 // ✅ Debug log
 $logLines[] = $password ? "🔐 Password protected" : "🔓 No password";
 $logLines[] = isset($cmd) ? "🛠️ Command:\n$cmd\n" : null;
-if ($format === 'zstd') $logLines[] = "🛠️ Commands:\n$cmd1\n$cmd2\n";
-$logLines[] = $cmdOutputStr ? "📥 Output:\n$cmdOutputStr\n" : null;
+if ($format === 'zstd') {
+  $logLines[] = "🛠️ Commands:\n$cmd1\n$cmd2\n";
+}
+
+// 🧼 Filter noisy trial and evaluation messages from output
+if ($cmdOutputStr) {
+  $excludedMessages = [
+    "Trial version             Type 'rar -?' for help",
+    "Evaluation copy. Please register.",
+  ];
+
+  $filteredCmdOutput = implode("\n", array_filter(
+    explode("\n", $cmdOutputStr),
+    fn($line) => !in_array(trim($line), $excludedMessages)
+  ));
+
+  $logLines[] = "📥 Output:\n$filteredCmdOutput\n";
+} else {
+  $logLines[] = null;
+}
+
 $logLines[] = "🔚 Exit code: $exitCode";
 $logLines[] = !empty($fixLogs) ? implode("\n", $fixLogs) : null;
 $logLines[] = $exitCode === 0
