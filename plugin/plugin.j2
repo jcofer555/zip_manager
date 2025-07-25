@@ -41,6 +41,7 @@ upgradepkg --install-new /boot/config/plugins/{{ name }}/{{ package_name }}-{{ e
 
 killall 7zzs >/dev/null 2>&1
 killall rar >/dev/null 2>&1
+killall unrar >/dev/null 2>&1
 tar xvf /boot/config/plugins/{{ name }}/7z2409-linux-x64.tar.xz -C /usr/bin/ 7zzs
 
 # cleanup old versions
@@ -67,8 +68,10 @@ removepkg {{ package_name }}
 
 killall 7zzs >/dev/null 2>&1
 killall rar >/dev/null 2>&1
+killall unrar >/dev/null 2>&1
 rm -f /usr/bin/7zzs
 rm -f /usr/bin/rar
+rm -f /usr/bin/unrar
 rm -rf /usr/local/emhttp/plugins/{{ name }}
 rm -rf /boot/config/plugins/{{ name }}
 ]]>
