@@ -520,6 +520,8 @@ if ($filename === 'extractor_debug.log') {
         <option value="tar">tar</option>
         <option value="tar.gz">tar.gz</option>
         <option value="zstd">tar.zst</option>
+        <option value="cbz">cbz</option>
+        <option value="cbr">cbr</option>
       </select>
     </div>
 

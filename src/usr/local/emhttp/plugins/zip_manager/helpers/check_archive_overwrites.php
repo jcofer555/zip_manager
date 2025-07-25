@@ -23,6 +23,8 @@ $archiveName = match ($format) {
   'tar.gz' => $name . '.tar.gz',
   'zstd' => $name . '.tar.zst',
   'rar'    => $name . '.rar',
+  'cbr'    => $name . '.cbr',
+  'cbz'    => $name . '.cbz',
   default  => $name . '.7z',
 };
 

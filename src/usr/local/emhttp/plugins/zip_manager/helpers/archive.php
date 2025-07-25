@@ -107,11 +107,15 @@ if (!empty($errors)) {
 }
 
 // ✅ Archive name
-$name = preg_replace('/(\.tar\.gz|\.tar\.zst|\.tar|\.zip|\.rar|\.7z)$/i', '', $name);
+$name = preg_replace('/(\.tar\.gz|\.tar\.zst|\.tar|\.zip|\.rar|\.7z|\.cbz|\.cbr)$/i', '', $name);
 if ($format === 'zstd') {
   $archiveName = $name . '.tar.zst';
 } elseif ($format === 'tar.gz') {
   $archiveName = $name . '.tar.gz';
+} elseif ($format === 'cbz') {
+  $archiveName = $name . '.cbz';
+} elseif ($format === 'cbr') {
+  $archiveName = $name . '.cbr';
 } else {
   $archiveName = $name . '.' . $format;
 }
@@ -165,7 +169,11 @@ if ($format === 'tar.gz') {
   $exitCode = ($code1 === 0 && $code2 === 0) ? 0 : 1;
 
 } else {
-  if ($format === 'rar') {
+  if ($format === 'cbz') {
+    $cmd = "/usr/bin/7zzs a -tzip " . escapeshellarg($archivePath);
+  } elseif ($format === 'cbr') {
+    $cmd = "/usr/bin/rar a " . escapeshellarg($archivePath);
+  } elseif ($format === 'rar') {
     $cmd = "/usr/bin/rar a " . escapeshellarg($archivePath);
   } else {
     $cmd = "/usr/bin/7zzs a -t{$format} " . escapeshellarg($archivePath);
