@@ -1,12 +1,11 @@
 <?php
-$input = $_GET['input'] ?? '';
-$output = $_GET['output'] ?? '';
+$input   = $_GET['input'] ?? '';
+$output  = $_GET['output'] ?? '';
 $password = $_GET['password'] ?? '';
 $passArg = $password ? "-p" . escapeshellarg($password) : "";
-$logFile = '/boot/config/plugins/zip_manager/logs/extractor_debug.log';
+$logFile  = '/boot/config/plugins/zip_manager/logs/extractor_debug.log';
 $logFile2 = '/boot/config/plugins/zip_manager/logs/extractor_history.log';
 
-// Always overwrite log with the last run only
 function overwriteLog(string $logFile, string $newLogContent): void {
     $newLogContent = rtrim($newLogContent) . "\n\n";
     file_put_contents($logFile, $newLogContent);
@@ -21,8 +20,8 @@ function applyOwnershipAndPermissionsFromBA(string $archivePath, string $extract
     }
 
     exec($listCmd . " 2>&1", $listOutput, $exitCode);
-
     $outputStr = implode("\n", $listOutput);
+
     if (strpos($outputStr, 'Enter password') !== false || strpos($outputStr, 'Wrong password') !== false) {
         $logs[] = "❌ Password required or incorrect when listing archive.";
         return $logs;
@@ -35,8 +34,7 @@ function applyOwnershipAndPermissionsFromBA(string $archivePath, string $extract
 
     $filePaths = [];
     foreach ($listOutput as $line) {
-        $line = trim($line);
-        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $line)) {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', trim($line))) {
             $parts = preg_split('/\s+/', $line, 6);
             if (isset($parts[5])) {
                 $relative = trim($parts[5], '/');
@@ -59,45 +57,62 @@ function applyOwnershipAndPermissionsFromBA(string $archivePath, string $extract
         exec($cmd, $chownOut, $chownCode);
         $chownOutput = implode("\n", $chownOut);
 
-        if ($chownCode === 0) {
-            $logs[] = "✅ chown succeeded: $path -> nobody:users";
-        } else {
-            $logs[] = "❌ chown failed: $path\nExit code: $chownCode\nOutput:\n$chownOutput";
-        }
+        $logs[] = ($chownCode === 0)
+            ? "✅ chown succeeded: $path -> nobody:users"
+            : "❌ chown failed: $path\nExit code: $chownCode\nOutput:\n$chownOutput";
 
         $perm = is_dir($path) ? 0777 : 0666;
-        $chmodSuccess = chmod($path, $perm);
-
-        if ($chmodSuccess) {
-            $logs[] = "✅ chmod applied: $path -> " . decoct($perm);
-        } else {
-            $logs[] = "❌ chmod failed: $path -> " . decoct($perm);
-        }
+        $logs[] = chmod($path, $perm)
+            ? "✅ chmod applied: $path -> " . decoct($perm)
+            : "❌ chmod failed: $path -> " . decoct($perm);
     }
 
     return $logs;
 }
 
-// Validate input/output
+// ✅ Validate input/output paths
+$errors = [];
+
 if (!file_exists($input)) {
-    echo "❌ Archive file not found.";
-    exit;
+    $errors[] = "❌ Archive file not found: $input";
+} else {
+    $realInput = realpath($input);
+    if ($realInput === false) {
+        $errors[] = "❌ Input path could not be resolved.";
+    } else {
+        $inputDepth = substr_count(rtrim($realInput, '/'), '/');
+        if ($inputDepth <= 2) {
+            $errors[] = "❌ Input path is not allowed: $realInput";
+        }
+    }
 }
 
 if (!is_dir($output)) {
-    echo "❌ Output directory not valid.";
+    $errors[] = "❌ Output directory not valid.";
+} else {
+    $realOutput = realpath($output);
+    if ($realOutput === false) {
+        $errors[] = "❌ Output path could not be resolved.";
+    } else {
+        $outputDepth = substr_count(rtrim($realOutput, '/'), '/');
+        if ($outputDepth <= 2) {
+            $errors[] = "❌ Output path is not allowed: $realOutput";
+        }
+    }
+}
+
+if (!empty($errors)) {
+    echo implode("\n", $errors);
     exit;
 }
 
-// Check if archive is tarball
+// ✅ Archive type check
 $isTarGz  = preg_match('/\.tar\.gz$/i', $input);
 $isTarZst = preg_match('/\.tar\.zst$/i', $input);
 $isTarArchive = $isTarGz || $isTarZst;
-
-$extractCmd = '';
 $tmpTarPath = $isTarArchive ? rtrim($output, '/') . '/decompressed_archive.tar' : null;
 
-// Step 0: Encrypted check
+// ✅ Encryption check
 exec("/usr/bin/7zzs t -pwrongpassword " . escapeshellarg($input) . " 2>&1", $testOutput, $testCode);
 $isEncrypted = false;
 foreach ($testOutput as $line) {
@@ -107,40 +122,39 @@ foreach ($testOutput as $line) {
     }
 }
 
-// Step 2.5: Detect conflicts
+// ✅ Conflict detection
 exec("/usr/bin/7zzs l $passArg -slt " . escapeshellarg($input), $rawOutput, $code);
 if ($code !== 0) {
-  echo json_encode(['error' => 'Failed to read archive contents']);
-  exit;
+    echo json_encode(['error' => 'Failed to read archive contents']);
+    exit;
 }
 
 $archiveFiles = [];
 foreach ($rawOutput as $line) {
-  if (strpos($line, 'Path = ') === 0) {
-    $path = trim(substr($line, 7));
-    if ($path && substr($path, -1) !== '/') {
-      $archiveFiles[] = $path;
+    if (strpos($line, 'Path = ') === 0) {
+        $path = trim(substr($line, 7));
+        if ($path && substr($path, -1) !== '/') {
+            $archiveFiles[] = $path;
+        }
     }
-  }
 }
 
 $conflicts = [];
 foreach ($archiveFiles as $relPath) {
-  $targetPath = $output . $relPath;
-  if (file_exists($targetPath)) {
-    $conflicts[] = $relPath;
-  }
+    $targetPath = $output . '/' . $relPath;
+    if (file_exists($targetPath)) {
+        $conflicts[] = $relPath;
+    }
 }
 
-// Step 3: Decompress tar.gz or tar.zst
+// ✅ Prepare extraction command
+$extractCmd = '';
 if ($isTarArchive) {
     if (file_exists($tmpTarPath)) @unlink($tmpTarPath);
 
-    if ($isTarGz) {
-        $cmd = "gzip -dc " . escapeshellarg($input) . " > " . escapeshellarg($tmpTarPath);
-    } elseif ($isTarZst) {
-        $cmd = "zstd -d --force -o " . escapeshellarg($tmpTarPath) . " " . escapeshellarg($input);
-    }
+    $cmd = $isTarGz
+        ? "gzip -dc " . escapeshellarg($input) . " > " . escapeshellarg($tmpTarPath)
+        : "zstd -d --force -o " . escapeshellarg($tmpTarPath) . " " . escapeshellarg($input);
 
     exec($cmd . " 2>&1", $decompressOutput, $decompressExitCode);
     if ($decompressExitCode !== 0) {
@@ -148,26 +162,21 @@ if ($isTarArchive) {
         exit;
     }
 
-    $extractCmd = "/usr/bin/tar -xf " . escapeshellarg($tmpTarPath) .
-                  " -C " . escapeshellarg($output);
+    $extractCmd = "/usr/bin/tar -xf " . escapeshellarg($tmpTarPath) . " -C " . escapeshellarg($output);
 } else {
-    // Check for .rar extension (including .part01.rar or .r00)
     if (preg_match('/\.rar$/i', $input)) {
-        $extractCmd = "/usr/bin/unrar x -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);
-        if (!empty($password)) {
-            $extractCmd = "/usr/bin/unrar x -p" . escapeshellarg($password) . " -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);
-        }
+        $extractCmd = empty($password)
+            ? "/usr/bin/unrar x -o+ " . escapeshellarg($input) . " " . escapeshellarg($output)
+            : "/usr/bin/unrar x -p" . escapeshellarg($password) . " -o+ " . escapeshellarg($input) . " " . escapeshellarg($output);
     } else {
-        // Regular non-rar archive
-        $extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) .
-                      " -o" . escapeshellarg($output) .
-                      " -y";
+        $extractCmd = "/usr/bin/7zzs x " . escapeshellarg($input) . " -o" . escapeshellarg($output) . " -y";
         if (!empty($password)) {
             $extractCmd .= " -p" . escapeshellarg($password);
         }
     }
 }
 
+// ✅ Perform extraction
 exec($extractCmd . " 2>&1", $extractOutput, $extractExitCode);
 $extractOutputStr = implode("\n", $extractOutput);
 
@@ -183,12 +192,12 @@ if ($extractExitCode !== 0) {
 
 echo "✅ Extraction completed.";
 
-// Cleanup temp tar
+// ✅ Cleanup
 if ($isTarArchive && file_exists($tmpTarPath)) {
     @unlink($tmpTarPath);
 }
 
-// Step 4: Log history
+// ✅ History log
 $timestamp = date("Y-m-d H:i:s");
 $status = ($extractExitCode === 0) ? "✅ Success:" : "❌ Failure:";
 $entry = "[$timestamp] $status $input -> $output";
@@ -198,26 +207,22 @@ $existing = array_slice($existing, -9);
 $existing[] = $entry;
 file_put_contents($logFile2, implode("\n", $existing) . "\n");
 
-// Step 5: Apply ownership/permissions
+// ✅ Apply ownership/permissions
 $chownChmodLogs = applyOwnershipAndPermissionsFromBA($input, $output, 99, 100, null, $password);
 
-// Step 6: Write debug log
+// ✅ Write debug log
 $logLines = [];
 $logLines[] = "=== Extraction started ===";
 $logLines[] = "⏰ Timestamp: $timestamp";
-$logLines[] = $input ? "📦 Input: $input" : null;
-$logLines[] = $output ? "📤 Output: $output" : null;
+$logLines[] = "📦 Input: $input";
+$logLines[] = "📤 Output: $output";
 $logLines[] = $isEncrypted ? "🔐 Archive is encrypted." : "✅ Archive is not encrypted.";
-
 $logLines[] = "📁 Conflict check:";
-if (count($conflicts)) {
-    $logLines[] = "⚠️ Conflicting file(s) detected (" . count($conflicts) . "):\n- " . implode("\n- ", $conflicts);
-} else {
-    $logLines[] = "✅ No conflicting files detected.";
-}
-
-$logLines[] = $extractCmd ? "🔧 Extraction command:\n$extractCmd" : null;
-$logLines[] = $extractOutputStr ? "📥 Extraction output:\n$extractOutputStr" : null;
+$logLines[] = count($conflicts)
+    ? "⚠️ Conflicting file(s) detected (" . count($conflicts) . "):\n- " . implode("\n- ", $conflicts)
+    : "✅ No conflicting files detected.";
+$logLines[] = "🔧 Extraction command:\n$extractCmd";
+$logLines[] = "📥 Extraction output:\n$extractOutputStr";
 $logLines[] = "🔚 Extraction exit code: $extractExitCode";
 $logLines[] = !empty($chownChmodLogs) ? implode("\n", $chownChmodLogs) : null;
 $logLines[] = "=== Extraction ended ===";

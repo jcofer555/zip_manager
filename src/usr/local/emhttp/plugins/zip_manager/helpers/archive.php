@@ -52,20 +52,59 @@ function getCpuCountFromLscpu(): int {
   return isset($matches[1]) ? (int)$matches[1] : 1;
 }
 
+// ✅ Error collection
+$errors = [];
+
 // ✅ Input validation
 $inputList = array_filter(array_map('trim', explode(',', $inputRaw)));
 $validInputs = [];
 $totalSize = 0;
 
 foreach ($inputList as $entry) {
-  if (!file_exists($entry)) exit("❌ Missing input path: $entry");
+  if (!file_exists($entry)) {
+    $errors[] = "❌ Missing input path: $entry";
+    continue;
+  }
+
+  $resolvedInput = realpath($entry);
+  if ($resolvedInput === false) {
+    $errors[] = "❌ Could not resolve input path: $entry";
+    continue;
+  }
+
+  $normalizedInput = rtrim($resolvedInput, '/');
+  $inputDepth = substr_count($normalizedInput, '/');
+  if ($inputDepth <= 2) {
+    $errors[] = "❌ Input path is not allowed: $resolvedInput";
+    continue;
+  }
+
   $validInputs[] = $entry;
   $entrySize = is_dir($entry) ? getFolderSize($entry) : filesize($entry);
   $totalSize += $entrySize;
 }
 
-if (empty($validInputs)) exit("❌ No valid input paths specified.");
-if (!is_dir($output)) exit("❌ Output directory not valid.");
+// ✅ Output validation
+if (!is_dir($output)) {
+  $errors[] = "❌ Output directory not valid.";
+} else {
+  $resolvedOutput = realpath($output);
+  if ($resolvedOutput === false) {
+    $errors[] = "❌ Could not resolve output path.";
+  } else {
+    $normalizedOutput = rtrim($resolvedOutput, '/');
+    $outputDepth = substr_count($normalizedOutput, '/');
+    if ($outputDepth <= 2) {
+      $errors[] = "❌ Output path is not allowed: $resolvedOutput";
+    }
+  }
+}
+
+// ✅ Report and exit on errors
+if (!empty($errors)) {
+  echo implode("\n", $errors);
+  exit;
+}
 
 // ✅ Archive name
 $name = preg_replace('/(\.tar\.gz|\.tar\.zst|\.tar|\.zip|\.rar|\.7z)$/i', '', $name);
@@ -169,12 +208,6 @@ if (file_exists($archivePath)) {
 }
 
 // ✅ Debug log
-$logLines = [];
-$logLines[] = "=== Archive creation started ===";
-$logLines[] = "⏰ Timestamp: $timestamp";
-$logLines[] = $validInputs ? "📦 Inputs:\n" . implode("\n", $validInputs) : null;
-$logLines[] = $archivePath ? "📤 Output: $archivePath" : null;
-$logLines[] = $totalSize ? "📏 Combined Size: " . round($totalSize / (1024 * 1024), 2) . " MB" : null;
 $logLines[] = $password ? "🔐 Password protected" : "🔓 No password";
 $logLines[] = isset($cmd) ? "🛠️ Command:\n$cmd\n" : null;
 if ($format === 'zstd') $logLines[] = "🛠️ Commands:\n$cmd1\n$cmd2\n";
@@ -187,7 +220,6 @@ $logLines[] = $exitCode === 0
 $logLines[] = "=== Archive creation ended ===";
 
 $logRunContent = implode("\n", array_filter($logLines)) . "\n";
-
 overwriteLog($logFile, $logRunContent);
 
 // ✅ Final response

@@ -472,6 +472,18 @@ if ($filename === 'extractor_debug.log') {
   </div>
 </div>
 
+    <!-- ➕ Button Container to the Right of Picker Modal -->
+<div id="addPathContainer" style="display:none; position:flex; top:0; left:460px;">
+  <button id="addPathBtn" style="
+    background-color: #222;
+    color: orange;
+    border: 1px solid orange;
+    padding: 6px 10px;
+    font-family: monospace;
+    cursor: pointer;
+  ">➕ Optional: Add archive file path to destination</button>
+</div>
+
 <div class="field-row" id="passwordRow">
   <label for="archivePassword">Archive password:</label>
   <div class="input-wrapper">
@@ -488,7 +500,8 @@ if ($filename === 'extractor_debug.log') {
 
     <div class="field-row">
       <label for="outputDir">Output directory:</label>
-      <input type="text" id="outputDir" class="highlight-input" placeholder="Click to browse" readonly onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+      <input type="text" id="outputDir" class="highlight-input" placeholder="Click to browse" readonly 
+      onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
     </div>
 
     <button onclick="runExtraction()">🚀 Extract</button>
@@ -694,6 +707,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
   document.getElementById("statusBox").innerText = "";
   document.getElementById("listOutput").style.display = "none";
   document.getElementById("listOutput").innerText = "";
+  document.getElementById("addPathContainer").style.display = "none";
   if (isModalLocked) return;
 
   currentTargetId = targetId;
@@ -761,9 +775,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
         'tar.gz','tar.bz2','tar.xz','tar.zst','lzh','lha','ace','zst','img'
       ];
 
-      const folders = [];
-      const supportedFiles = [];
-      const unsupportedFiles = [];
+      const folders = [], supportedFiles = [], unsupportedFiles = [];
 
       filteredItems.forEach(item => {
         const name = item.name;
@@ -837,31 +849,38 @@ function openPicker(targetId, isDir, path = "/mnt/") {
           span.addEventListener("mouseenter", () => span.style.textDecoration = "underline");
           span.addEventListener("mouseleave", () => span.style.textDecoration = "none");
 
+const injectAddPath = () => {
+  let parentPath = entry.fullPath.substring(0, entry.fullPath.lastIndexOf("/"));
+  if (!parentPath.endsWith("/")) parentPath += "/";
+  
+  const btnContainer = document.getElementById("addPathContainer");
+  const addBtn = document.getElementById("addPathBtn");
+  btnContainer.style.display = "block";
+
+  addBtn.onclick = () => {
+    document.getElementById("outputDir").value = parentPath;
+    btnContainer.style.display = "none";
+  };
+};
+
           span.addEventListener("click", (e) => {
             if (e.detail > 1) return;
             clickTimer = setTimeout(() => {
               document.getElementById(targetId).value = entry.fullPath;
 
-              // ✅ Show size for Extractor field
               if (targetId === "inputFile") {
-                const displaySpan = document.getElementById("fileCountDisplay");
-                displaySpan.textContent = entry.size > 0
-                  ? `💾 ${formatSize(entry.size)}`
-                  : "";
-              }
+                document.getElementById("fileCountDisplay").textContent =
+                  entry.size > 0 ? `💾 ${formatSize(entry.size)}` : "";
 
-              if (targetId === "inputFile") {
+                injectAddPath();
+
                 fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(entry.fullPath)}`)
                   .then(res => res.json())
                   .then(data => {
-                    console.log("Encryption check:", data);
                     document.getElementById("archivePassword").value = "";
-                    const passwordRow = document.getElementById("passwordRow");
-                    passwordRow.style.display = data.encrypted ? "flex" : "none";
+                    document.getElementById("passwordRow").style.display = data.encrypted ? "flex" : "none";
                   })
-                  .catch(err => {
-                    console.error("Encryption check failed:", err);
-                  });
+                  .catch(err => console.error("Encryption check failed:", err));
               }
 
               closeModal();
@@ -873,10 +892,10 @@ function openPicker(targetId, isDir, path = "/mnt/") {
             document.getElementById(targetId).value = entry.fullPath;
 
             if (targetId === "inputFile") {
-              const displaySpan = document.getElementById("fileCountDisplay");
-              displaySpan.textContent = entry.size > 0
-                ? `💾 ${formatSize(entry.size)}`
-                : "";
+              document.getElementById("fileCountDisplay").textContent =
+                entry.size > 0 ? `💾 ${formatSize(entry.size)}` : "";
+
+              injectAddPath();
             }
 
             closeModal();
