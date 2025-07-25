@@ -770,7 +770,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       }
 
       const allowedExtensions = [
-        '7z','zip','rar','tar','gz','bz2','xz','lzma','z','cab','arj','iso','udf',
+        '7z','zip','rar','tar','gz','bz2','cbz','cbr','xz','lzma','z','cab','arj','iso','udf',
         'wim','dmg','vhd','vmdk','msi','deb','rpm','cpio','chm','nsis','exe',
         'tar.gz','tar.bz2','tar.xz','tar.zst','lzh','lha','ace','zst','img'
       ];
