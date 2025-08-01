@@ -1,6 +1,6 @@
 {
     "files": [
-        "/boot/config/plugins/zip_manager/archiver_history.log",
-        "/boot/config/plugins/zip_manager/extracor_history.log"
+        "/boot/config/plugins/zip_manager/logs/archiver_history.log",
+        "/boot/config/plugins/zip_manager/logs/extractor_history.log"
     ]
 }
