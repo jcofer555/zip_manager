@@ -221,8 +221,8 @@ body {
 
 #fileCountDisplay {
   position: absolute;
-  top: 50%;
-  left: 100%; /* anchor to the right of the input field */
+  top: 26%;
+  left: 28%; /* anchor to the right of the input field */
   transform: translateY(-50%);
   width: 275px; /* fixed width to prevent shifting */
   font-family: monospace;
@@ -488,13 +488,11 @@ if ($filename === 'extractor_debug.log') {
 
 <div class="field-row">
   <label for="inputFile">Archive file:</label>
-  <div class="input-wrapper">
     <input type="text" id="inputFile" class="highlight-input"
       placeholder="Click to browse" readonly
       onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
     <span id="fileCountDisplay"></span>
   </div>
-</div>
 
     <!-- ➕ Button Container to the Right of Picker Modal -->
 <div id="addPathContainer" style="display:none; position:flex; top:0; left:460px;">
@@ -503,17 +501,15 @@ if ($filename === 'extractor_debug.log') {
 
 <div class="field-row" id="passwordRow">
   <label for="archivePassword">Archive password:</label>
-  <div class="input-wrapper">
     <input type="password" id="archivePassword" class="highlight-input"
       placeholder="Required for encrypted archives" />
-    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
+    <span id="togglePasswordWrapper" style="display: none; margin-left: 29px;">
       <label style="color: orange; font-size: 16px; cursor: pointer;">
         <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
         Show
       </label>
     </span>
   </div>
-</div>
 
     <div class="field-row">
       <label for="outputDir">Output directory:</label>
@@ -531,14 +527,14 @@ if ($filename === 'extractor_debug.log') {
     <div id="listOutput" style="display: none; margin-top: 12px; background: #111111; border: 1px solid orange; padding: 12px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 16px; color: orange;"></div>
 
   <!-- 📜 Right: Floating Extraction History -->
-  <div style="position: absolute; top: 6px; right: 300px; width: 800px;">
+  <div style="position: absolute; top: 6px; right: 300px; width: 825px;">
     <div onclick="toggleHistory()" style="cursor: pointer; display: flex; align-items: center; color: white; margin-bottom: 8px;">
       <span id="historyArrow" style="display: inline-block; width: 20px;">▼</span>
       <h2 style="margin: 0;">📜 Extraction history</h2>
     </div>
 
     <div id="historyContainer" style="margin-top: 10px;">
-      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1080px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
+      <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1090px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
       <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No extraction history!</div>
     </div>
 
