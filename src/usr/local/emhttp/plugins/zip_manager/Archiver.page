@@ -137,16 +137,6 @@ if (!is_dir($logDir)) {
   animation: shake 0.5s;
 }
 
-#pickerMessage {
-  color: gray;
-  font-size: 0.85em;
-  margin-top: 8px;
-  opacity: 0.6;
-  height: 20px;
-  line-height: 20px;
-  box-sizing: border-box;
-}
-
 @keyframes statusPulse {
   0%   { background-color: #2a2a2a; }
   20%  { background-color: #3a3a3a; }
@@ -464,7 +454,6 @@ if ($filename === 'extractor_debug.log') {
     <div id="pickerModal" style="display: none;">
       <div id="breadcrumb"></div>
       <ul id="fileList"></ul>
-      <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8;">* Double-click to select a folder</div>
     </div>
   </div>
     <br>
@@ -642,12 +631,20 @@ function parentDirectory(path) {
   return path;
 }
 
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const value = bytes / Math.pow(1024, i);
-  return `${value.toFixed(1)} ${sizes[i]}`;
+function showSelected(path, size) {
+  const list = document.getElementById("selectedFiles");
+  if (list.querySelector(`li[data-path="${path}"]`)) return; // avoid duplicates
+
+  const item = document.createElement("li");
+  item.textContent = `${path} (${size})`;
+  item.dataset.path = path;
+  list.appendChild(item);
+}
+
+function removeSelected(path) {
+  const list = document.getElementById("selectedFiles");
+  const item = list.querySelector(`li[data-path="${path}"]`);
+  if (item) list.removeChild(item);
 }
 
 let isModalLocked = false;
@@ -656,6 +653,34 @@ let clickTimer = null;
 let currentTargetId = null;
 let currentIsDir = null;
 let currentPath = null;
+const selectedFilesMap = new Map(); // key: path, value: size string
+
+function showSelected(path, size) {
+  const list = document.getElementById("selectedFiles");
+  if (!list) return;
+  if (list.querySelector(`li[data-path="${path}"]`)) return;
+
+  const item = document.createElement("li");
+  item.textContent = `${path} (${formatBytes(size)})`;
+  item.dataset.path = path;
+  list.appendChild(item);
+}
+
+function removeSelected(path) {
+  const list = document.getElementById("selectedFiles");
+  if (!list) return;
+
+  const item = list.querySelector(`li[data-path="${path}"]`);
+  if (item) list.removeChild(item);
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
 
 function openPicker(targetId, isDir, path = "/mnt/") {
   document.getElementById("statusBox").innerText = "";
@@ -666,7 +691,6 @@ function openPicker(targetId, isDir, path = "/mnt/") {
   currentPath = path;
 
   const showHint = isDir || targetId === "inputFile";
-  document.getElementById("pickerMessage").style.display = showHint ? "block" : "none";
   updateBreadcrumb(path);
 
   fetch(`/plugins/zip_manager/helpers/list_files.php?dir=${encodeURIComponent(path)}`)
@@ -682,6 +706,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
 
       if (path !== "/mnt/") {
         const liUp = document.createElement("li");
+        liUp.style.marginLeft = "-9px";
         const spanUp = document.createElement("span");
         spanUp.textContent = "⬆️ Parent Directory";
         spanUp.style.color = "orange";
@@ -697,23 +722,22 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       }
 
       const skipFolders = ['user0/', 'addons/', 'rootshare/'];
-const isOutputField = targetId === "outputDir";
+      const isOutputField = targetId === "outputDir";
 
-const filteredItems = items
-  .filter(item => {
-    if (skipFolders.includes(item.name)) return false;
-    if (isOutputField && !item.name.endsWith("/")) return false; // 💡 Hide files in output picker
-    return true;
-  })
-  .sort((a, b) => {
-    const aFolder = a.name.endsWith("/");
-    const bFolder = b.name.endsWith("/");
-    if (aFolder && !bFolder) return -1;
-    if (!aFolder && bFolder) return 1;
-    return a.name.localeCompare(b.name);
-  });
+      const filteredItems = items
+        .filter(item => {
+          if (skipFolders.includes(item.name)) return false;
+          if (isOutputField && !item.name.endsWith("/")) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const aFolder = a.name.endsWith("/");
+          const bFolder = b.name.endsWith("/");
+          if (aFolder && !bFolder) return -1;
+          if (!aFolder && bFolder) return 1;
+          return a.name.localeCompare(b.name);
+        });
 
-      // 🔒 Dynamically build list of top-level folders
       if (disallowedBaseFolders.length === 0 && path === "/mnt/") {
         disallowedBaseFolders = filteredItems
           .filter(item => item.name.endsWith("/"))
@@ -729,108 +753,139 @@ const filteredItems = items
 
       entries.forEach(entry => {
         const li = document.createElement("li");
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.style.marginRight = "8px";
+        checkbox.dataset.fullPath = entry.fullPath;
+        checkbox.dataset.isFolder = entry.isFolder;
+        checkbox.className = "picker-checkbox";
+
         const span = document.createElement("span");
         const icon = entry.isFolder ? "📁" : "📄";
         const sizeStr = !entry.isFolder && entry.size > 0 ? ` (${formatBytes(entry.size)})` : "";
-
         span.textContent = `${icon} ${entry.name}${sizeStr}`;
-
-const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
-if (isDisallowed && entry.isFolder) {
-  span.title = "Can't be selected";
-}
         span.style.color = "orange";
         span.style.cursor = "pointer";
         span.style.fontFamily = "monospace";
         span.style.fontSize = "16px";
 
-        let localClickTimer = null;
-
-        // 🖱️ Single-click handler
-span.onclick = () => {
-  if (localClickTimer) clearTimeout(localClickTimer);
-
-  localClickTimer = setTimeout(() => {
-    if (entry.isFolder) {
-      openPicker(targetId, isDir, entry.fullPath);
-    } else if (targetId === "inputFile") {
-      fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(entry.fullPath)}`)
-        .then(res => res.json())
-        .then(data => {
-          addFileToSelection(entry.fullPath, data.bytes || 0);
-        });
-    }
-    localClickTimer = null;
-  }, 350);
-};
-
-        // 🖱️ Double-click handler for folder selection
-span.ondblclick = () => {
-  if (localClickTimer) clearTimeout(localClickTimer);
-  localClickTimer = null;
-
-  if (entry.isFolder) {
-    const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
-    if (isDisallowed) {
-      shakeModal();
-      return;
-    }
-
-    fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(entry.fullPath)}`)
-      .then(res => res.json())
-      .then(data => {
-        const size = data.bytes || 0;
-
-        if (currentTargetId === "inputFile") {
-          addFileToSelection(entry.fullPath, size);
-          // ❌ Don't close modal — allow multi-select
-        } else if (currentTargetId === "outputDir") {
-          document.getElementById("outputDir").value = entry.fullPath;
-          closeModal(); // ✅ Only close for output folder
+        const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
+        if (isDisallowed && entry.isFolder) {
+          span.title = "Can't be selected";
+          checkbox.disabled = true;
         }
-      });
-  }
-};
 
+        span.onclick = () => {
+          if (entry.isFolder) {
+            openPicker(targetId, isDir, entry.fullPath);
+          }
+        };
+
+        // ✅ Restore checked state and display
+        if (selectedFilesMap.has(entry.fullPath)) {
+          checkbox.checked = true;
+          showSelected(entry.fullPath, selectedFilesMap.get(entry.fullPath));
+        }
+
+        // ✅ Attach change listener
+        checkbox.addEventListener("change", () => {
+          if (targetId === "outputDir") {
+            document.querySelectorAll(".picker-checkbox").forEach(cb => {
+              if (cb !== checkbox) cb.checked = false;
+            });
+          }
+
+          if (checkbox.checked) {
+            fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(entry.fullPath)}`)
+              .then(res => res.json())
+              .then(data => {
+                const size = data.bytes || 0;
+                selectedFilesMap.set(entry.fullPath, size);
+                showSelected(entry.fullPath, size);
+              });
+          } else {
+            selectedFilesMap.delete(entry.fullPath);
+            removeSelected(entry.fullPath);
+          }
+        });
+
+        li.appendChild(checkbox);
         li.appendChild(span);
         ul.appendChild(li);
       });
 
-// 🧩 Show "Done Selecting" button only for input picker
-const footerId = "pickerFooter";
-const existingFooter = document.getElementById(footerId);
+      // ✅ Add "Add Selected" button
+      const addBtnId = "pickerAddSelected";
+      if (!document.getElementById(addBtnId)) {
+        const addBtn = document.createElement("button");
+        addBtn.id = addBtnId;
+        addBtn.textContent = "✅ Add Selected";
+        addBtn.style.cssText = `
+          color: orange;
+          background: #222;
+          border: 1px solid orange;
+          padding: 6px 12px;
+          font-family: monospace;
+          font-size: 14px;
+          cursor: pointer;
+          border-radius: 4px;
+          margin-top: 8px;
+        `;
+        addBtn.onclick = () => {
+          const selected = Array.from(document.querySelectorAll(".picker-checkbox:checked"));
+          selected.forEach(cb => {
+            const path = cb.dataset.fullPath;
+            const isFolder = cb.dataset.isFolder === "true";
 
-// ✅ Add button for inputFile picker
-if (targetId === "inputFile" && !existingFooter) {
-const footer = document.createElement("div");
-footer.id = "pickerFooter";
-footer.style.cssText = `
-  position: absolute;
-  top: 25px;
-  right: 0px;
-  z-index: 9999;
-  opacity: 0;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  transform: translateY(-10px);
-`;
-footer.innerHTML = `<button onclick="closeModal()" style="
-  color: orange;
-  background: #222;
-  border: 1px solid orange;
-  padding: 6px 12px;
-  font-family: monospace;
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px;
-">✅ Done</button>`;
-document.getElementById("pickerModal").appendChild(footer);
+            fetch(`/plugins/zip_manager/helpers/get_file_size.php?path=${encodeURIComponent(path)}`)
+              .then(res => res.json())
+              .then(data => {
+                const size = data.bytes || 0;
 
-}
+                if (currentTargetId === "inputFile") {
+                  addFileToSelection(path, size);
+                } else if (currentTargetId === "outputDir") {
+                  document.getElementById("outputDir").value = path;
 
-// 🧹 Remove footer if switching to output picker
-if (targetId !== "inputFile" && existingFooter) {
-  existingFooter.remove();
-}
+                  // ✅ Close modal only for outputDir
+                  document.getElementById("pickerModal").classList.remove("show");
+                  document.getElementById("pickerModal").style.display = "none";
+                }
+              });
+          });
+        };
+        document.getElementById("pickerModal").appendChild(addBtn);
+      }
+
+      // ✅ Add "Done" button for inputFile
+      const footerId = "pickerFooter";
+      if (targetId === "inputFile" && !document.getElementById(footerId)) {
+        const footer = document.createElement("div");
+        footer.id = footerId;
+        footer.style.cssText = `
+          position: absolute;
+          top: 25px;
+          right: 0px;
+          z-index: 9999;
+        `;
+        footer.innerHTML = `<button onclick="closeModal()" style="
+          color: orange;
+          background: #222;
+          border: 1px solid orange;
+          padding: 6px 12px;
+          font-family: monospace;
+          font-size: 14px;
+          cursor: pointer;
+          border-radius: 4px;
+        ">✅ Done</button>`;
+        document.getElementById("pickerModal").appendChild(footer);
+      }
+
+      if (targetId !== "inputFile") {
+        const existingFooter = document.getElementById(footerId);
+        if (existingFooter) existingFooter.remove();
+      }
 
       document.getElementById("pickerModal").style.display = "block";
     });

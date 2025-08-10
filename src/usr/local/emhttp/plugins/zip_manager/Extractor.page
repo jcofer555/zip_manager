@@ -137,16 +137,6 @@ if (!is_dir($logDir)) {
   animation: shake 0.5s;
 }
 
-#pickerMessage {
-  color: gray;
-  font-size: 0.85em;
-  margin-top: 8px;
-  opacity: 0.6;
-  height: 20px;
-  line-height: 20px;
-  box-sizing: border-box;
-}
-
 #passwordRow {
   display: none;
 }
@@ -469,7 +459,6 @@ if ($filename === 'extractor_debug.log') {
     <div id="pickerModal" style="display: none;">
       <div id="breadcrumb"></div>
       <ul id="fileList"></ul>
-      <div id="pickerMessage" style="color: gray; font-size: 0.85em; margin-top: 8px; opacity: 0.8;">* Double-click to select a folder</div>
     </div>
   </div>
     <br>
@@ -503,9 +492,9 @@ if ($filename === 'extractor_debug.log') {
   <label for="archivePassword">Archive password:</label>
     <input type="password" id="archivePassword" class="highlight-input"
       placeholder="Required for encrypted archives" />
-    <span id="togglePasswordWrapper" style="display: none; margin-left: 29px;">
+    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
       <label style="color: orange; font-size: 16px; cursor: pointer;">
-        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
+        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 9px;" />
         Show
       </label>
     </span>
@@ -672,23 +661,22 @@ function listArchiveContents() {
       listHTML += "</ul>";
       outputBox.innerHTML = listHTML;
     })
-    .catch(err => {
-      outputBox.innerHTML = "<div style='color: orange;'>❌ Check or enter your password.</div>";
+.catch(err => {
+  outputBox.innerHTML = "<div style='color: orange;'>❌ Check or enter your password.</div>";
+  clearPasswordOnly(); // 👈 Only clear password
 
-      // 👇 Optional glow effect on the password field for visual feedback
-      const pwdInput = document.getElementById("archivePassword");
-      if (pwdInput) {
-        pwdInput.classList.add("shake");
-        pwdInput.style.boxShadow = "0 0 6px 2px rgba(255, 0, 0, 0.5)";
+  const pwdInput = document.getElementById("archivePassword");
+  if (pwdInput) {
+    pwdInput.classList.add("shake");
+    pwdInput.style.boxShadow = "0 0 6px 2px rgba(255, 0, 0, 0.5)";
+    setTimeout(() => {
+      pwdInput.classList.remove("shake");
+      pwdInput.style.boxShadow = "";
+    }, 600);
+  }
 
-        setTimeout(() => {
-          pwdInput.classList.remove("shake");
-          pwdInput.style.boxShadow = "";
-        }, 600);
-      }
-
-      console.error("List error:", err);
-    });
+  console.error("List error:", err);
+});
 }
 
 function parentDirectory(path) {
@@ -727,7 +715,6 @@ function openPicker(targetId, isDir, path = "/mnt/") {
   currentIsDir = isDir;
   currentPath = path;
 
-  document.getElementById("pickerMessage").style.display = isDir ? "block" : "none";
   updateBreadcrumb(path);
 
   fetch(`/plugins/zip_manager/helpers/list_files.php?dir=${encodeURIComponent(path)}`)
@@ -741,29 +728,18 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       const ul = document.getElementById("fileList");
       ul.innerHTML = "";
 
-      if (path !== "/mnt/") {
-        const liUp = document.createElement("li");
-        const spanUp = document.createElement("span");
-        spanUp.textContent = "⬆️ Parent Directory";
-        spanUp.style.color = "orange";
-        spanUp.style.padding = "4px 8px";
-        spanUp.style.cursor = "pointer";
-        spanUp.title = "Go to parent directory";
-        spanUp.addEventListener("click", () => {
-          let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
-          parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
-          openPicker(targetId, isDir, parentPath);
-        });
-        liUp.appendChild(spanUp);
-        ul.appendChild(liUp);
-      }
+if (path !== "/mnt/") {
+  const liUp = document.createElement("li");
+  liUp.style.marginLeft = "-3px"; // shift left by 2px
 
-      function formatSize(bytes) {
-        if (bytes >= 1 << 30) return (bytes / (1 << 30)).toFixed(2) + " GB";
-        if (bytes >= 1 << 20) return (bytes / (1 << 20)).toFixed(2) + " MB";
-        if (bytes >= 1 << 10) return (bytes / (1 << 10)).toFixed(2) + " KB";
-        return bytes + " B";
-      }
+  liUp.innerHTML = `<span style="color:orange;cursor:pointer;">⬆️ Parent Directory</span>`;
+  liUp.onclick = () => {
+    let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
+    parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
+    openPicker(targetId, isDir, parentPath);
+  };
+  ul.appendChild(liUp);
+}
 
       const skipFolders = ['user0/', 'addons/', 'rootshare/'];
       const filteredItems = items
@@ -788,142 +764,119 @@ function openPicker(targetId, isDir, path = "/mnt/") {
         'tar.gz','tar.bz2','tar.xz','tar.zst','lzh','lha','ace','zst','img'
       ];
 
-      const folders = [], supportedFiles = [], unsupportedFiles = [];
-
-      filteredItems.forEach(item => {
-        const name = item.name;
-        const size = item.size;
-        const fullPath = path + name;
-        const isFolder = name.endsWith("/");
-
-        if (isFolder) {
-          folders.push({ name, size, fullPath });
-        } else {
-          const lower = name.toLowerCase();
-          const isValid = allowedExtensions.some(ext => lower.endsWith(`.${ext}`));
-          const entry = { name, size, fullPath };
-          if (isValid) supportedFiles.push(entry);
-          else unsupportedFiles.push(entry);
+      let addSelectedBtn = document.createElement("button");
+      addSelectedBtn.textContent = "✅ Add Selected";
+      addSelectedBtn.className = "btn-orange";
+      addSelectedBtn.style.marginTop = "8px";
+      addSelectedBtn.onclick = () => {
+        const checked = ul.querySelector("input[type='checkbox']:checked");
+        if (!checked) {
+          shakeModal();
+          return;
         }
+        document.getElementById(targetId).value = checked.value;
+
+        if (targetId === "inputFile") {
+          const size = checked.dataset.size;
+          document.getElementById("fileCountDisplay").textContent = size ? `💾 ${size}` : "";
+
+          let parentPath = checked.value.substring(0, checked.value.lastIndexOf("/"));
+          if (!parentPath.endsWith("/")) parentPath += "/";
+          const btnContainer = document.getElementById("addPathContainer");
+          const addBtn = document.getElementById("addPathBtn");
+          btnContainer.style.display = "block";
+          addBtn.onclick = () => {
+            document.getElementById("outputDir").value = parentPath;
+            btnContainer.style.display = "none";
+          };
+
+          fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(checked.value)}`)
+            .then(res => res.json())
+            .then(data => {
+              document.getElementById("archivePassword").value = "";
+              document.getElementById("passwordRow").style.display = data.encrypted ? "flex" : "none";
+            })
+            .catch(err => console.error("Encryption check failed:", err));
+        }
+
+        closeModal();
+      };
+
+      // Render folders
+      filteredItems.forEach(item => {
+if (item.name.endsWith("/")) {
+  const fullPath = path + item.name;
+  const li = document.createElement("li");
+  const wrapper = document.createElement("span");
+  wrapper.style.gap = "8px";
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.value = fullPath;
+  cb.style.margin = "0";
+
+  if (isDir && !disallowedBaseFolders.includes(fullPath)) {
+    // ✅ outputDir mode: selectable checkbox
+    cb.onclick = () => {
+      ul.querySelectorAll("input[type='checkbox']").forEach(c => { if (c !== cb) c.checked = false; });
+    };
+  } else {
+    // ✅ inputFile mode: show but disable checkbox
+    cb.disabled = true;
+    cb.style.opacity = "0.5"; // optional: dim it visually
+    cb.style.cursor = "not-allowed";
+  }
+
+  wrapper.appendChild(cb);
+
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = `📁 ${item.name}`;
+  nameSpan.style.color = "orange";
+  nameSpan.style.cursor = "pointer";
+  nameSpan.onclick = () => openPicker(targetId, isDir, fullPath);
+
+  wrapper.appendChild(nameSpan);
+  li.appendChild(wrapper);
+  ul.appendChild(li);
+}
+
       });
 
-      folders.forEach(entry => {
-        const li = document.createElement("li");
-        const span = document.createElement("span");
-        span.textContent = `📁 ${entry.name}`;
-        span.style.color = "orange";
-        span.style.padding = "4px 8px";
-        span.style.cursor = "pointer";
+      // Render files
+      if (!isDir) {
+        filteredItems.forEach(item => {
+          if (!item.name.endsWith("/")) {
+            const lower = item.name.toLowerCase();
+            const isValid = allowedExtensions.some(ext => lower.endsWith(`.${ext}`));
+            if (!isValid) return;
 
-        const isDisallowed = disallowedBaseFolders.includes(entry.fullPath);
-        if (isDisallowed) {
-          span.title = "Can't be selected";
-          span.style.cursor = "default";
-        }
+            const li = document.createElement("li");
+            const wrapper = document.createElement("span");
+            wrapper.style.gap = "8px";
 
-        span.onmouseenter = () => span.style.textDecoration = "underline";
-        span.onmouseleave = () => span.style.textDecoration = "none";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = path + item.name;
+            cb.dataset.size = formatBytes(item.size);
+            cb.style.margin = "0";
+            cb.onclick = () => {
+              ul.querySelectorAll("input[type='checkbox']").forEach(c => { if (c !== cb) c.checked = false; });
+            };
+            wrapper.appendChild(cb);
 
-        span.addEventListener("click", (e) => {
-          if (e.detail > 1) return;
-          clickTimer = setTimeout(() => {
-            openPicker(targetId, isDir, entry.fullPath);
-          }, 200);
-        });
+            const fileLabel = document.createElement("span");
+            fileLabel.textContent = `📄 ${item.name} (${formatBytes(item.size)})`;
+            fileLabel.style.color = "orange";
 
-        span.addEventListener("dblclick", () => {
-          clearTimeout(clickTimer);
-          if (isDir) {
-            if (isDisallowed) {
-              shakeModal();
-              return;
-            }
-            document.getElementById(targetId).value = entry.fullPath;
-            closeModal();
+            wrapper.appendChild(fileLabel);
+            li.appendChild(wrapper);
+            ul.appendChild(li);
           }
         });
-
-        li.appendChild(span);
-        ul.appendChild(li);
-      });
-
-      function renderFile(entry, isDisabled = false) {
-        const li = document.createElement("li");
-        const span = document.createElement("span");
-        const fileSizeStr = entry.size > 0 ? ` (${formatSize(entry.size)})` : "";
-        span.textContent = `📄 ${entry.name}${fileSizeStr}`;
-        span.style.padding = "4px 8px";
-        span.style.color = isDisabled ? "gray" : "orange";
-        span.style.textDecoration = isDisabled ? "line-through" : "none";
-        span.style.cursor = isDisabled ? "not-allowed" : "pointer";
-        span.title = isDisabled ? "Unsupported file format" : "Click to select this file";
-
-        if (!isDisabled) {
-          span.addEventListener("mouseenter", () => span.style.textDecoration = "underline");
-          span.addEventListener("mouseleave", () => span.style.textDecoration = "none");
-
-const injectAddPath = () => {
-  let parentPath = entry.fullPath.substring(0, entry.fullPath.lastIndexOf("/"));
-  if (!parentPath.endsWith("/")) parentPath += "/";
-  
-  const btnContainer = document.getElementById("addPathContainer");
-  const addBtn = document.getElementById("addPathBtn");
-  btnContainer.style.display = "block";
-
-  addBtn.onclick = () => {
-    document.getElementById("outputDir").value = parentPath;
-    btnContainer.style.display = "none";
-  };
-};
-
-          span.addEventListener("click", (e) => {
-            if (e.detail > 1) return;
-            clickTimer = setTimeout(() => {
-              document.getElementById(targetId).value = entry.fullPath;
-
-              if (targetId === "inputFile") {
-                document.getElementById("fileCountDisplay").textContent =
-                  entry.size > 0 ? `💾 ${formatSize(entry.size)}` : "";
-
-                injectAddPath();
-
-                fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(entry.fullPath)}`)
-                  .then(res => res.json())
-                  .then(data => {
-                    document.getElementById("archivePassword").value = "";
-                    document.getElementById("passwordRow").style.display = data.encrypted ? "flex" : "none";
-                  })
-                  .catch(err => console.error("Encryption check failed:", err));
-              }
-
-              closeModal();
-            }, 300);
-          });
-
-          span.addEventListener("dblclick", () => {
-            clearTimeout(clickTimer);
-            document.getElementById(targetId).value = entry.fullPath;
-
-            if (targetId === "inputFile") {
-              document.getElementById("fileCountDisplay").textContent =
-                entry.size > 0 ? `💾 ${formatSize(entry.size)}` : "";
-
-              injectAddPath();
-            }
-
-            closeModal();
-          });
-        }
-
-        li.appendChild(span);
-        ul.appendChild(li);
       }
 
-      if (!isDir) {
-        supportedFiles.forEach(file => renderFile(file));
-        unsupportedFiles.forEach(file => renderFile(file, true));
-      }
-
+      ul.appendChild(document.createElement("br"));
+      ul.appendChild(addSelectedBtn);
       document.getElementById("pickerModal").style.display = "block";
     });
 }
@@ -1011,6 +964,20 @@ function clearForm() {
   window.location.href = window.location.href;
 }
 
+function clearAllFields() {
+  document.getElementById("inputFile").value = "";
+  document.getElementById("outputDir").value = "";
+  document.getElementById("archivePassword").value = "";
+  document.getElementById("passwordRow").style.display = "none";
+  document.getElementById("togglePasswordWrapper").style.display = "none";
+  document.getElementById("fileCountDisplay").textContent = "";
+}
+
+function clearPasswordOnly() {
+  document.getElementById("archivePassword").value = "";
+  document.getElementById("togglePasswordWrapper").style.display = "none";
+}
+
 function runExtraction() {
   const password = document.getElementById("archivePassword").value || "";
   const input = document.getElementById("inputFile").value;
@@ -1072,21 +1039,20 @@ function runExtraction() {
             .then(msg => {
               statusBox.innerText = msg;
               extractButton.disabled = false;
-              document.getElementById("archivePassword").value = "";
-              loadExtractHistory();
 
-              // 🧹 Clear fields after extraction
-              document.getElementById("inputFile").value = "";
-              document.getElementById("archivePassword").value = "";
-              document.getElementById("outputDir").value = "";
-              document.getElementById("passwordRow").style.display = "none";
-              document.getElementById("togglePasswordWrapper").style.display = "none";
-              document.getElementById("fileCountDisplay").textContent = "";
+              const isSuccess = msg.includes("✅");
+              if (isSuccess) {
+                clearAllFields();
+                loadExtractHistory();
+              } else {
+                clearPasswordOnly();
+              }
             })
             .catch(err => {
               console.error("Extraction error:", err);
               statusBox.innerText = "❌ Extraction failed.";
               extractButton.disabled = false;
+              clearPasswordOnly();
             });
         };
 
@@ -1103,21 +1069,20 @@ function runExtraction() {
           .then(msg => {
             statusBox.innerText = msg;
             extractButton.disabled = false;
-            document.getElementById("archivePassword").value = "";
-            loadExtractHistory();
 
-            // 🧹 Clear fields after extraction
-            document.getElementById("inputFile").value = "";
-            document.getElementById("archivePassword").value = "";
-            document.getElementById("outputDir").value = "";
-            document.getElementById("passwordRow").style.display = "none";
-            document.getElementById("togglePasswordWrapper").style.display = "none";
-            document.getElementById("fileCountDisplay").textContent = "";
+            const isSuccess = msg.includes("✅");
+            if (isSuccess) {
+              clearAllFields();
+              loadExtractHistory();
+            } else {
+              clearPasswordOnly();
+            }
           })
           .catch(err => {
             console.error("Extraction error:", err);
             statusBox.innerText = "❌ Extraction failed.";
             extractButton.disabled = false;
+            clearPasswordOnly();
           });
       }
     })
@@ -1125,6 +1090,7 @@ function runExtraction() {
       console.error("Conflict check error:", err);
       statusBox.innerText = "❌ Could not check for overwrite conflicts.";
       extractButton.disabled = false;
+      clearPasswordOnly();
     });
 }
 

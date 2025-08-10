@@ -130,14 +130,17 @@ if ($isTar) {
 exec($extractCmd, $extractOutput, $exitCode);
 $extractOutputStr = implode("\n", $extractOutput);
 
-if (preg_match('/Wrong password|Enter password/', $extractOutputStr)) {
-    echo "❌ Incorrect or missing password.";
+// Friendly password error handling
+if (preg_match('/Wrong password|Enter password|incorrect password|Program aborted/i', $extractOutputStr)) {
+    echo "❌ Extraction error:\n\nCheck your password";
     exit;
 }
+
 if ($exitCode !== 0) {
     echo "❌ Extraction error:\n" . htmlspecialchars($extractOutputStr);
     exit;
 }
+
 echo "✅ Extraction completed.";
 
 // 🧹 Cleanup
