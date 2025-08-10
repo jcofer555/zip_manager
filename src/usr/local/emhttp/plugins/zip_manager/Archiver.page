@@ -496,9 +496,9 @@ if ($filename === 'extractor_debug.log') {
 <div id="passwordField" class="field-row hidden">
   <label for="archivePassword">Archive password:</label>
     <input type="password" id="archivePassword" class="highlight-input" placeholder="Optional" />
-    <span id="togglePasswordWrapper" style="display: none; margin-left: 29px;">
+    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
       <label style="color: orange; font-size: 16px; cursor: pointer;">
-        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
+        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 9px;" />
         Show
       </label>
     </span>
