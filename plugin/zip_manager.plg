@@ -4,7 +4,7 @@
 <PLUGIN 
   name="zip_manager"
   author="jcofer555"
-  version="2025.08.10"
+  version="2025.08.11"
   launch="Settings/Extractor"
   pluginURL="https://raw.githubusercontent.com/jcofer555/zip_manager/main/plugin/zip_manager.plg"
   support="https://forums.unraid.net/topic/191678-zip-manager-for-unraid/"
@@ -16,6 +16,12 @@
 <CHANGES>
 <![CDATA[
 
+### 2025.08.11
+
+- More changes to error messages and styling
+- Allow 20 lines of log to show
+- Add clear selected button
+
 ### 2025.08.10
 
 - Changed to checkbox selection
@@ -26,24 +32,19 @@
 
 - More alignment fixes for unraid 7.2
 
-### 2025.08.01
-
-- Fixed enhanced log logging
-- Fixed width for unraid 7.2
-
 
 For older releases, see https://github.com/jcofer555/zip_manager/releases
 ]]>
 </CHANGES>
 
 <FILE Name="/boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz">
-<URL>https://github.com/jcofer555/zip_manager/raw/refs/tags/2025.08.10/packages/7z2409-linux-x64.tar.xz</URL>
+<URL>https://github.com/jcofer555/zip_manager/raw/refs/tags/2025.08.11/packages/7z2409-linux-x64.tar.xz</URL>
 <SHA256>914c7e20ad5ef8e4d3cf08620ff8894b28fe11b7eb99809d6930870fbe48a281</SHA256>
 </FILE>
 
-<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.08.10-noarch-1.txz">
-<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.08.10/unraid-zip-manager-2025.08.10-noarch-1.txz</URL>
-<SHA256>efea6cc6240932f2d002593cb9bea59bee1901da51caa33cb35168420bfded24</SHA256>
+<FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.08.11-noarch-1.txz">
+<URL>https://github.com/jcofer555/zip_manager/releases/download/2025.08.11/unraid-zip-manager-2025.08.11-noarch-1.txz</URL>
+<SHA256>4c664e31182aa8e7ce1dc0764dcb1c9a41d01c1ed4492ccfdd5d7a9648da7bf3</SHA256>
 </FILE>
 
 <!--
@@ -52,7 +53,7 @@ The 'install' script.
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
-upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.08.10-noarch-1.txz
+upgradepkg --install-new /boot/config/plugins/zip_manager/unraid-zip-manager-2025.08.11-noarch-1.txz
 
 killall 7zzs >/dev/null 2>&1
 killall rar >/dev/null 2>&1
@@ -60,13 +61,13 @@ killall unrar >/dev/null 2>&1
 tar xvf /boot/config/plugins/zip_manager/7z2409-linux-x64.tar.xz -C /usr/bin/ 7zzs
 
 # cleanup old versions
-rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.08.10')
+rm -f $(ls /boot/config/plugins/zip_manager/unraid-zip-manager-*.txz 2>/dev/null | grep -v '2025.08.11')
 rm -f $(ls /boot/config/plugins/zip_manager/*.tar.xz 2>/dev/null | grep -v '7z2409-linux-x64.tar.xz')
 
 echo ""
 echo "----------------------------------------------------"
 echo " zip_manager has been installed."
-echo " Version: 2025.08.10"
+echo " Version: 2025.08.11"
 echo "----------------------------------------------------"
 echo ""
 ]]>
