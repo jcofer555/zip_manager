@@ -19,8 +19,9 @@
 ### 2025.08.11
 
 - More changes to error messages and styling
-- Allow 20 lines of log to show
-- Add clear selected button
+- Allow 20 log messages to be shown
+- Add clear selected button to the pickers
+- Archive name changes to output directory when selected
 
 ### 2025.08.10
 
@@ -44,7 +45,7 @@ For older releases, see https://github.com/jcofer555/zip_manager/releases
 
 <FILE Name="/boot/config/plugins/zip_manager/unraid-zip-manager-2025.08.11-noarch-1.txz">
 <URL>https://github.com/jcofer555/zip_manager/releases/download/2025.08.11/unraid-zip-manager-2025.08.11-noarch-1.txz</URL>
-<SHA256>4c664e31182aa8e7ce1dc0764dcb1c9a41d01c1ed4492ccfdd5d7a9648da7bf3</SHA256>
+<SHA256>a52c2576d6eba966a81e4183d3ae3b43a5fec895dac90f517d5370229d5d24cb</SHA256>
 </FILE>
 
 <!--
