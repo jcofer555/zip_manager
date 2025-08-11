@@ -477,7 +477,6 @@ if ($filename === 'extractor_debug.log') {
   onclick="openPicker('inputFile', false, '/mnt/')" />
     <span id="fileCountDisplay" data-total-bytes="0"></span>
   </div>
-<br>
 
     <div class="field-row">
       <label for="outputDir">Output Directory:</label>
