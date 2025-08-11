@@ -132,7 +132,7 @@ $extractOutputStr = implode("\n", $extractOutput);
 
 // Friendly password error handling
 if (preg_match('/Wrong password|Enter password|incorrect password|Program aborted/i', $extractOutputStr)) {
-    echo "❌ Extraction error:\n\nCheck your password";
+    echo "❌ Password is not correct.";
     exit;
 }
 
@@ -148,7 +148,7 @@ if ($isTar && file_exists($tmpTarPath)) @unlink($tmpTarPath);
 
 // 🕘 History
 $entry = "[" . date("Y-m-d H:i:s") . "] " . ($exitCode === 0 ? "✅ Success" : "❌ Failure") . ": $input → $output";
-$history = file_exists($logFile2) ? array_slice(file($logFile2, FILE_IGNORE_NEW_LINES), -9) : [];
+$history = file_exists($logFile2) ? array_slice(file($logFile2, FILE_IGNORE_NEW_LINES), -19) : [];
 $history[] = $entry;
 file_put_contents($logFile2, implode("\n", $history) . "\n");
 

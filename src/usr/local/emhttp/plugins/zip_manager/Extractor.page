@@ -211,8 +211,8 @@ body {
 
 #fileCountDisplay {
   position: absolute;
-  top: 26%;
-  left: 28%; /* anchor to the right of the input field */
+  top: 37%;
+  left: 26%; /* anchor to the right of the input field */
   transform: translateY(-50%);
   width: 275px; /* fixed width to prevent shifting */
   font-family: monospace;
@@ -492,9 +492,9 @@ if ($filename === 'extractor_debug.log') {
   <label for="archivePassword">Archive password:</label>
     <input type="password" id="archivePassword" class="highlight-input"
       placeholder="Required for encrypted archives" />
-    <span id="togglePasswordWrapper" style="display: none; margin-left: -4px;">
+    <span id="togglePasswordWrapper" style="display: none; margin-left: 3px;">
       <label style="color: orange; font-size: 16px; cursor: pointer;">
-        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 9px;" />
+        <input type="checkbox" id="togglePassword" onchange="togglePasswordVisibility()" style="margin-right: 4px;" />
         Show
       </label>
     </span>
@@ -622,10 +622,11 @@ function listArchiveContents() {
   outputBox.innerHTML = "";
   outputBox.style.display = "block";
 
-  if (!input) {
-    outputBox.innerHTML = "<div style='color: orange;'>❌ Please select an archive file first.</div>";
-    return;
-  }
+if (!input) {
+  document.getElementById("statusBox").innerText = "❌ Please select an archive file first.";
+  outputBox.style.display = "none";
+  return;
+}
 
   outputBox.innerHTML = "<div style='color: orange;'>🔄 Listing archive contents...</div>";
 
@@ -728,18 +729,17 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       const ul = document.getElementById("fileList");
       ul.innerHTML = "";
 
-if (path !== "/mnt/") {
-  const liUp = document.createElement("li");
-  liUp.style.marginLeft = "-3px"; // shift left by 2px
-
-  liUp.innerHTML = `<span style="color:orange;cursor:pointer;">⬆️ Parent Directory</span>`;
-  liUp.onclick = () => {
-    let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
-    parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
-    openPicker(targetId, isDir, parentPath);
-  };
-  ul.appendChild(liUp);
-}
+      if (path !== "/mnt/") {
+        const liUp = document.createElement("li");
+        liUp.style.marginLeft = "-3px";
+        liUp.innerHTML = `<span style="color:orange;cursor:pointer;">⬆️ Parent Directory</span>`;
+        liUp.onclick = () => {
+          let parentPath = path.endsWith("/") ? path.slice(0, -1) : path;
+          parentPath = parentPath.substring(0, parentPath.lastIndexOf("/") + 1);
+          openPicker(targetId, isDir, parentPath);
+        };
+        ul.appendChild(liUp);
+      }
 
       const skipFolders = ['user0/', 'addons/', 'rootshare/'];
       const filteredItems = items
@@ -802,44 +802,63 @@ if (path !== "/mnt/") {
         closeModal();
       };
 
+      let clearSelectedBtn = document.createElement("button");
+      clearSelectedBtn.textContent = "❌ Clear Selected";
+      clearSelectedBtn.className = "btn-orange";
+      clearSelectedBtn.style.marginLeft = "auto";
+      clearSelectedBtn.onclick = () => {
+        document.getElementById(targetId).value = "";
+
+        if (targetId === "inputFile") {
+          document.getElementById("fileCountDisplay").textContent = "";
+          document.getElementById("archivePassword").value = "";
+          document.getElementById("passwordRow").style.display = "none";
+          document.getElementById("togglePasswordWrapper").style.display = "none";
+          document.getElementById("addPathContainer").style.display = "none";
+        }
+
+        if (targetId === "outputDir") {
+          document.getElementById("outputDir").value = "";
+        }
+
+        closeModal();
+      };
+
       // Render folders
       filteredItems.forEach(item => {
-if (item.name.endsWith("/")) {
-  const fullPath = path + item.name;
-  const li = document.createElement("li");
-  const wrapper = document.createElement("span");
-  wrapper.style.gap = "8px";
+        if (item.name.endsWith("/")) {
+          const fullPath = path + item.name;
+          const li = document.createElement("li");
+          const wrapper = document.createElement("span");
+          wrapper.style.gap = "8px";
 
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.value = fullPath;
-  cb.style.margin = "0";
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.value = fullPath;
+          cb.style.margin = "0";
 
-  if (isDir && !disallowedBaseFolders.includes(fullPath)) {
-    // ✅ outputDir mode: selectable checkbox
-    cb.onclick = () => {
-      ul.querySelectorAll("input[type='checkbox']").forEach(c => { if (c !== cb) c.checked = false; });
-    };
-  } else {
-    // ✅ inputFile mode: show but disable checkbox
-    cb.disabled = true;
-    cb.style.opacity = "0.5"; // optional: dim it visually
-    cb.style.cursor = "not-allowed";
-  }
+          if (isDir && !disallowedBaseFolders.includes(fullPath)) {
+            cb.onclick = () => {
+              ul.querySelectorAll("input[type='checkbox']").forEach(c => { if (c !== cb) c.checked = false; });
+            };
+          } else {
+            cb.disabled = true;
+            cb.style.opacity = "0.5";
+            cb.style.cursor = "not-allowed";
+          }
 
-  wrapper.appendChild(cb);
+          wrapper.appendChild(cb);
 
-  const nameSpan = document.createElement("span");
-  nameSpan.textContent = `📁 ${item.name}`;
-  nameSpan.style.color = "orange";
-  nameSpan.style.cursor = "pointer";
-  nameSpan.onclick = () => openPicker(targetId, isDir, fullPath);
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = `📁 ${item.name}`;
+          nameSpan.style.color = "orange";
+          nameSpan.style.cursor = "pointer";
+          nameSpan.onclick = () => openPicker(targetId, isDir, fullPath);
 
-  wrapper.appendChild(nameSpan);
-  li.appendChild(wrapper);
-  ul.appendChild(li);
-}
-
+          wrapper.appendChild(nameSpan);
+          li.appendChild(wrapper);
+          ul.appendChild(li);
+        }
       });
 
       // Render files
@@ -875,8 +894,18 @@ if (item.name.endsWith("/")) {
         });
       }
 
-      ul.appendChild(document.createElement("br"));
-      ul.appendChild(addSelectedBtn);
+const buttonWrapper = document.createElement("div");
+buttonWrapper.style.display = "flex";
+buttonWrapper.style.marginTop = "8px";
+
+addSelectedBtn.style.marginRight = "8px";
+clearSelectedBtn.style.marginLeft = "auto"; // now this works!
+
+buttonWrapper.appendChild(addSelectedBtn);
+buttonWrapper.appendChild(clearSelectedBtn);
+
+ul.appendChild(document.createElement("br"));
+ul.appendChild(buttonWrapper);
       document.getElementById("pickerModal").style.display = "block";
     });
 }

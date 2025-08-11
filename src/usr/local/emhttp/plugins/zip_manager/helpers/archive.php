@@ -197,7 +197,7 @@ $status    = ($exitCode === 0) ? "✅ Success:" : "❌ Failure:";
 $entry     = "[$timestamp] $status " . implode(", ", $validInputs) . " -> $archivePath";
 
 $existing = file_exists($logFile2) ? file($logFile2, FILE_IGNORE_NEW_LINES) : [];
-$existing = array_slice($existing, -9);
+$existing = array_slice($existing, -19);
 $existing[] = $entry;
 file_put_contents($logFile2, implode("\n", $existing) . "\n");
 

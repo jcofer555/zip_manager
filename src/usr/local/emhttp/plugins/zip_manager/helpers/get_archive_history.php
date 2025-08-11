@@ -7,4 +7,4 @@ if (!file_exists($historyPath) || !trim(file_get_contents($historyPath))) {
 }
 
 $lines = array_filter(array_map('trim', file($historyPath)));
-echo str_replace('-&gt;', '->', htmlspecialchars(implode("\n", array_slice($lines, -10))));
+echo str_replace('-&gt;', '->', htmlspecialchars(implode("\n", array_slice($lines, -20))));
