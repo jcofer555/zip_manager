@@ -806,23 +806,25 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       clearSelectedBtn.textContent = "❌ Clear Selected";
       clearSelectedBtn.className = "btn-orange";
       clearSelectedBtn.style.marginLeft = "auto";
-      clearSelectedBtn.onclick = () => {
-        document.getElementById(targetId).value = "";
+clearSelectedBtn.onclick = () => {
+  const ul = document.getElementById("fileList");
+  ul.querySelectorAll("input[type='checkbox']").forEach(cb => cb.checked = false);
 
-        if (targetId === "inputFile") {
-          document.getElementById("fileCountDisplay").textContent = "";
-          document.getElementById("archivePassword").value = "";
-          document.getElementById("passwordRow").style.display = "none";
-          document.getElementById("togglePasswordWrapper").style.display = "none";
-          document.getElementById("addPathContainer").style.display = "none";
-        }
+  document.getElementById(targetId).value = "";
 
-        if (targetId === "outputDir") {
-          document.getElementById("outputDir").value = "";
-        }
+  if (targetId === "inputFile") {
+    document.getElementById("fileCountDisplay").textContent = "";
+    document.getElementById("archivePassword").value = "";
+    document.getElementById("passwordRow").style.display = "none";
+    document.getElementById("togglePasswordWrapper").style.display = "none";
+    document.getElementById("addPathContainer").style.display = "none";
+  }
 
-        closeModal();
-      };
+  if (targetId === "outputDir") {
+    document.getElementById("outputDir").value = "";
+  }
+
+};
 
       // Render folders
       filteredItems.forEach(item => {
