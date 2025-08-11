@@ -802,10 +802,17 @@ function openPicker(targetId, isDir, path = "/mnt/") {
               if (currentTargetId === "inputFile") {
                 addFileToSelection(path, size);
               } else if (currentTargetId === "outputDir") {
-                selectedOutputDir.set(path, size);
-                document.getElementById("outputDir").value = path;
-                closeModal();
-              }
+  selectedOutputDir.set(path, size);
+  document.getElementById("outputDir").value = path;
+
+  // 🆕 Auto-set archive name to folder name
+  const folderName = path.split("/").filter(Boolean).pop(); // get last non-empty segment
+  if (folderName) {
+    document.getElementById("archiveName").value = folderName;
+  }
+
+  closeModal();
+}
             });
         });
       };
