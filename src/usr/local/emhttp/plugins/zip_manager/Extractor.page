@@ -477,9 +477,9 @@ if ($filename === 'extractor_debug.log') {
 
 <div class="field-row">
   <label for="inputFile">Archive file:</label>
-    <input type="text" id="inputFile" class="highlight-input"
-      placeholder="Click to browse" readonly
-      onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value))" />
+<input type="text" id="inputFile" class="highlight-input"
+  placeholder="Click to browse" readonly
+  onclick="openPicker('inputFile', false, parentDirectory(document.getElementById('inputFile').value)); validateExtractButton()" />
     <span id="fileCountDisplay"></span>
   </div>
 
@@ -502,12 +502,13 @@ if ($filename === 'extractor_debug.log') {
 
     <div class="field-row">
       <label for="outputDir">Output directory:</label>
-      <input type="text" id="outputDir" class="highlight-input" placeholder="Click to browse" readonly 
-      onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+<input type="text" id="outputDir" class="highlight-input"
+  placeholder="Click to browse" readonly
+  onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/'); validateExtractButton()" />
     </div>
 
-    <button onclick="runExtraction()">🚀 Extract</button>
-    <button onclick="listArchiveContents()">📄 List Contents</button>
+    <button id="extractBtn" onclick="runExtraction()" title="Select both archive file and output directory">🚀 Extract</button>
+    <button id="listContentsBtn" onclick="listArchiveContents()" title="Select archive file">📄 List Contents</button>
     <button onclick="clearForm()">🧹 Clear Form</button>
     <br/><br/>
     <div id="statusBox"></div>
@@ -542,6 +543,22 @@ if ($filename === 'extractor_debug.log') {
 </div>
 
 <script>
+function validateExtractButton() {
+  const inputFile = document.getElementById("inputFile").value.trim();
+  const outputDir = document.getElementById("outputDir").value.trim();
+  const extractBtn = document.getElementById("extractBtn");
+  const listBtn = document.getElementById("listContentsBtn");
+
+  const isExtractValid = inputFile && outputDir;
+  const isListValid = inputFile;
+
+  extractBtn.disabled = !isExtractValid;
+  extractBtn.title = isExtractValid ? "" : "Select both archive file and output directory";
+
+  listBtn.disabled = !isListValid;
+  listBtn.title = isListValid ? "" : "Select archive file";
+}
+
   function togglePasswordVisibility() {
   const passwordInput = document.getElementById("archivePassword");
   const toggle = document.getElementById("togglePassword");
@@ -788,6 +805,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
           addBtn.onclick = () => {
             document.getElementById("outputDir").value = parentPath;
             btnContainer.style.display = "none";
+            validateExtractButton(); // ✅ Update button state
           };
 
           fetch(`/plugins/zip_manager/helpers/check_encryption.php?input=${encodeURIComponent(checked.value)}`)
@@ -799,6 +817,7 @@ function openPicker(targetId, isDir, path = "/mnt/") {
             .catch(err => console.error("Encryption check failed:", err));
         }
 
+        validateExtractButton(); // ✅ Update button state
         closeModal();
       };
 
@@ -806,25 +825,25 @@ function openPicker(targetId, isDir, path = "/mnt/") {
       clearSelectedBtn.textContent = "❌ Clear Selected";
       clearSelectedBtn.className = "btn-orange";
       clearSelectedBtn.style.marginLeft = "auto";
-clearSelectedBtn.onclick = () => {
-  const ul = document.getElementById("fileList");
-  ul.querySelectorAll("input[type='checkbox']").forEach(cb => cb.checked = false);
+      clearSelectedBtn.onclick = () => {
+        ul.querySelectorAll("input[type='checkbox']").forEach(cb => cb.checked = false);
+        document.getElementById(targetId).value = "";
 
-  document.getElementById(targetId).value = "";
+        if (targetId === "inputFile") {
+          document.getElementById("fileCountDisplay").textContent = "";
+          document.getElementById("archivePassword").value = "";
+          document.getElementById("passwordRow").style.display = "none";
+          document.getElementById("togglePasswordWrapper").style.display = "none";
+          document.getElementById("addPathContainer").style.display = "none";
+        }
 
-  if (targetId === "inputFile") {
-    document.getElementById("fileCountDisplay").textContent = "";
-    document.getElementById("archivePassword").value = "";
-    document.getElementById("passwordRow").style.display = "none";
-    document.getElementById("togglePasswordWrapper").style.display = "none";
-    document.getElementById("addPathContainer").style.display = "none";
-  }
+        if (targetId === "outputDir") {
+          document.getElementById("outputDir").value = "";
+        }
 
-  if (targetId === "outputDir") {
-    document.getElementById("outputDir").value = "";
-  }
-
-};
+        validateExtractButton(); // ✅ Update button state
+        // Do NOT close modal
+      };
 
       // Render folders
       filteredItems.forEach(item => {
@@ -896,18 +915,18 @@ clearSelectedBtn.onclick = () => {
         });
       }
 
-const buttonWrapper = document.createElement("div");
-buttonWrapper.style.display = "flex";
-buttonWrapper.style.marginTop = "8px";
+      const buttonWrapper = document.createElement("div");
+      buttonWrapper.style.display = "flex";
+      buttonWrapper.style.marginTop = "8px";
 
-addSelectedBtn.style.marginRight = "8px";
-clearSelectedBtn.style.marginLeft = "auto"; // now this works!
+      addSelectedBtn.style.marginRight = "8px";
+      clearSelectedBtn.style.marginLeft = "auto";
 
-buttonWrapper.appendChild(addSelectedBtn);
-buttonWrapper.appendChild(clearSelectedBtn);
+      buttonWrapper.appendChild(addSelectedBtn);
+      buttonWrapper.appendChild(clearSelectedBtn);
 
-ul.appendChild(document.createElement("br"));
-ul.appendChild(buttonWrapper);
+      ul.appendChild(document.createElement("br"));
+      ul.appendChild(buttonWrapper);
       document.getElementById("pickerModal").style.display = "block";
     });
 }
@@ -1026,7 +1045,7 @@ function runExtraction() {
   statusBox.innerText = "";
 
   if (!input || !output) {
-    statusBox.innerText = "❌ Please select both archive file and output directory.";
+    statusBox.innerText = "❌ Select both archive file and output directory.";
     return;
   }
 
@@ -1149,6 +1168,7 @@ function loadExtractHistory() {
 loadExtractHistory();
 
 document.addEventListener("DOMContentLoaded", () => {
+  validateExtractButton();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 

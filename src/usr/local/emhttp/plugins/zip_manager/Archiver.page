@@ -472,23 +472,24 @@ if ($filename === 'extractor_debug.log') {
 
 <div class="field-row">
   <label for="inputFile">Files to archive:</label>
-    <input type="text" id="inputFile" class="highlight-input"
+<input type="text" id="inputFile" class="highlight-input"
   placeholder="Click to browse - Multiple is allowed" readonly
-  onclick="openPicker('inputFile', false, '/mnt/')" />
+  onclick="openPicker('inputFile', false, '/mnt/'); validateArchiveButton()" />
     <span id="fileCountDisplay" data-total-bytes="0"></span>
   </div>
 
     <div class="field-row">
       <label for="outputDir">Output Directory:</label>
-      <input type="text" id="outputDir" class="highlight-input"
-        placeholder="Click to browse" readonly
-        onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/')" />
+<input type="text" id="outputDir" class="highlight-input"
+  placeholder="Click to browse" readonly
+  onclick="openPicker('outputDir', true, document.getElementById('outputDir').value || '/mnt/'); validateArchiveButton()" />
     </div>
 
     <div class="field-row">
       <label for="archiveName">Archive name:</label>
-      <input type="text" id="archiveName" class="highlight-input"
-        placeholder="Enter archive name" value="archive" />
+<input type="text" id="archiveName" class="highlight-input"
+  placeholder="Enter archive name" value="archive"
+  oninput="validateArchiveButton()" />
     </div>
 
 <div id="passwordField" class="field-row hidden">
@@ -516,7 +517,7 @@ if ($filename === 'extractor_debug.log') {
       </select>
     </div>
 
-    <button onclick="runArchiving()">🚀 Create Archive</button>
+    <button id="archiveBtn" onclick="runArchiving()" title="Select both files to archive and output directory, and enter a name">🚀 Archive</button>
     <button onclick="clearForm()">🧹 Clear Form</button>
     <br/><br/>
     <div id="statusBox"></div>
@@ -548,6 +549,18 @@ if ($filename === 'extractor_debug.log') {
 </div>
 
 <script>
+function validateArchiveButton() {
+  const inputFile = document.getElementById("inputFile").value.trim();
+  const outputDir = document.getElementById("outputDir").value.trim();
+  const archiveName = document.getElementById("archiveName").value.trim();
+  const archiveBtn = document.getElementById("archiveBtn");
+
+  const isValid = inputFile && outputDir && archiveName;
+
+  archiveBtn.disabled = !isValid;
+  archiveBtn.title = isValid ? "" : "Select both files to archive and output directory, and enter a name";
+}
+
   function togglePasswordVisibility() {
   const passwordInput = document.getElementById("archivePassword");
   const toggle = document.getElementById("togglePassword");
@@ -801,17 +814,19 @@ function openPicker(targetId, isDir, path = "/mnt/") {
               if (currentTargetId === "inputFile") {
                 addFileToSelection(path, size);
               } else if (currentTargetId === "outputDir") {
-  selectedOutputDir.set(path, size);
-  document.getElementById("outputDir").value = path;
+                selectedOutputDir.set(path, size);
+                document.getElementById("outputDir").value = path;
 
-  // 🆕 Auto-set archive name to folder name
-  const folderName = path.split("/").filter(Boolean).pop(); // get last non-empty segment
-  if (folderName) {
-    document.getElementById("archiveName").value = folderName;
-  }
+                // 🆕 Auto-set archive name to folder name
+                const folderName = path.split("/").filter(Boolean).pop();
+                if (folderName) {
+                  document.getElementById("archiveName").value = folderName;
+                }
 
-  closeModal();
-}
+                closeModal();
+              }
+
+              validateArchiveButton(); // ✅ Update button state
             });
         });
       };
@@ -827,6 +842,8 @@ function openPicker(targetId, isDir, path = "/mnt/") {
           selectedOutputDir.clear();
           document.getElementById("outputDir").value = "";
         }
+
+        validateArchiveButton(); // ✅ Update button state
       };
 
       const btnWrapper = document.createElement("div");
@@ -863,6 +880,7 @@ function addFileToSelection(path, size = 0) {
   const totalSize = Array.from(selectedInputFiles.values()).reduce((a, b) => a + b, 0);
   displaySpan.dataset.totalBytes = totalSize.toString();
   displaySpan.textContent = totalSize > 0 ? `💾 ${formatBytes(totalSize)}` : "";
+  validateArchiveButton();
 }
 
 function updateBreadcrumb(path) {
@@ -937,6 +955,7 @@ function clearForm() {
   // Hide modals
   document.getElementById("pickerModal").style.display = "none";
   document.getElementById("overwriteModal").style.display = "none";
+  validateArchiveButton();
 
   // ✅ Re-enable archive button
   const archiveButton = document.querySelector("button[onclick='runArchiving()']");
@@ -1110,6 +1129,7 @@ formatSelect.addEventListener("change", updatePasswordVisibility);
 loadarchiveHistory();
 
 document.addEventListener("DOMContentLoaded", () => {
+  validateArchiveButton();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 
