@@ -528,7 +528,7 @@ if ($filename === 'extractor_debug.log') {
     </div>
 
     <button id="archiveBtn" onclick="runArchiving()" title="Select both files to archive and output directory, and enter an archive name">🚀 Archive</button>
-    <button onclick="clearForm()">🧹 Clear Form</button>
+    <button id="clearFormBtn" onclick="clearForm()">🧹 Clear Form</button>
     <br/><br/>
     <div id="statusBox"></div>
 
@@ -559,6 +559,23 @@ if ($filename === 'extractor_debug.log') {
 </div>
 
 <script>
+function validateClearFormButton() {
+  const inputFile = document.getElementById("inputFile").value.trim();
+  const outputDir = document.getElementById("outputDir").value.trim();
+  const archivePassword = document.getElementById("archivePassword").value.trim();
+  const archiveName = document.getElementById("archiveName").value.trim();
+  const clearBtn = document.getElementById("clearFormBtn");
+
+  const isDefaultState =
+    !inputFile &&
+    !outputDir &&
+    !archivePassword &&
+    archiveName === "archive";
+
+  clearBtn.disabled = isDefaultState;
+  clearBtn.title = isDefaultState ? "Nothing to clear" : "";
+}
+
 function validateArchiveButton() {
   const inputFile = document.getElementById("inputFile").value.trim();
   const outputDir = document.getElementById("outputDir").value.trim();
@@ -569,6 +586,7 @@ function validateArchiveButton() {
 
   archiveBtn.disabled = !isValid;
   archiveBtn.title = isValid ? "" : "Select both files to archive and output directory, and enter a name";
+  validateClearFormButton();
 }
 
   function togglePasswordVisibility() {
@@ -979,6 +997,7 @@ function clearForm() {
   if (archiveButton) archiveButton.disabled = false;
 
   window.location.href = window.location.href;
+  validateClearFormButton();
 }
 
 function runArchiving() {
@@ -1176,6 +1195,7 @@ loadarchiveHistory();
 
 document.addEventListener("DOMContentLoaded", () => {
   validateArchiveButton();
+  validateClearFormButton();
   loadarchiveHistory();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");

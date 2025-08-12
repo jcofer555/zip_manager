@@ -519,7 +519,7 @@ if ($filename === 'extractor_debug.log') {
 
     <button id="extractBtn" onclick="runExtraction()" title="Select both archive file and output directory">🚀 Extract</button>
     <button id="listContentsBtn" onclick="listArchiveContents()" title="Select archive file">📄 List Contents</button>
-    <button onclick="clearForm()">🧹 Clear Form</button>
+    <button id="clearFormBtn" onclick="clearForm()">🧹 Clear Form</button>
     <br/><br/>
     <div id="statusBox"></div>
 
@@ -553,6 +553,16 @@ if ($filename === 'extractor_debug.log') {
 </div>
 
 <script>
+function validateClearFormButton() {
+  const inputFile = document.getElementById("inputFile").value.trim();
+  const outputDir = document.getElementById("outputDir").value.trim();
+  const clearBtn = document.getElementById("clearFormBtn");
+
+  const isClearable = inputFile || outputDir;
+  clearBtn.disabled = !isClearable;
+  clearBtn.title = isClearable ? "" : "Nothing to clear";
+}
+
 function validateExtractButton() {
   const inputFile = document.getElementById("inputFile").value.trim();
   const outputDir = document.getElementById("outputDir").value.trim();
@@ -567,6 +577,7 @@ function validateExtractButton() {
 
   listBtn.disabled = !isListValid;
   listBtn.title = isListValid ? "" : "Select archive file";
+  validateClearFormButton();
 }
 
   function togglePasswordVisibility() {
@@ -1215,6 +1226,7 @@ loadExtractHistory();
 document.addEventListener("DOMContentLoaded", () => {
   validateExtractButton();
   loadExtractHistory();
+  validateClearFormButton();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 
