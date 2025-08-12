@@ -239,6 +239,16 @@ body {
   box-shadow: 0 0 6px 2px rgba(255, 165, 0, 0.4);
   color: white; /* ensures glow + white text on focus */
 }
+
+#extractLogPlaceholder {
+  display: none;
+  font-family: monospace;
+  font-size: 16px;
+  padding: 8px;
+  background-color: #111111;
+  max-width: 1090px;
+  margin-top: 8px;
+}
 </style>
 
 <?php
@@ -525,10 +535,10 @@ if ($filename === 'extractor_debug.log') {
 
     <div id="historyContainer" style="margin-top: 10px;">
       <div id="extractLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1090px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
-      <div id="extractLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No extraction history!</div>
+      <div id="extractLogPlaceholder" style="display: none; color: white; margin-top: 8px;">No extraction history!</div>
     </div>
 
-    <button onclick="clearExtractHistory()" style="margin-top: 12px;">🧹 Clear History</button>
+    <button id="clearHistoryBtn" onclick="clearExtractHistory()" title="No history to clear" disabled>🧹 Clear History</button>
 
     <!-- 🧨 Clear History Modal -->
     <div id="clearHistoryModal" style="display:none; margin-top:12px; background:#111111; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
@@ -611,19 +621,26 @@ function clearExtractHistory() {
 
   modal.style.display = "block";
 
-  confirmBtn.onclick = () => {
-    modal.style.display = "none";
-    fetch("/plugins/zip_manager/helpers/clear_extract_history.php", { method: "GET" })
-      .then(res => res.text())
-      .then(() => {
-        logBox.innerText = "No extraction history!";
-        logBox.style.display = "block";
-      })
-      .catch(() => {
-        logBox.innerText = "❌ Failed to clear history.";
-        logBox.style.display = "block";
-      });
-  };
+confirmBtn.onclick = () => {
+  modal.style.display = "none";
+  fetch("/plugins/zip_manager/helpers/clear_extract_history.php", { method: "GET" })
+    .then(res => res.text())
+    .then(() => {
+      const logBox = document.getElementById("extractLogBox");
+      const placeholder = document.getElementById("extractLogPlaceholder");
+      const clearBtn = document.getElementById("clearHistoryBtn");
+
+      logBox.innerText = "";
+      logBox.style.display = "none";
+      placeholder.style.display = "block";
+
+      clearBtn.disabled = true;
+      clearBtn.title = "No history to clear";
+    })
+    .catch(() => {
+      document.getElementById("extractLogBox").innerText = "❌ Failed to clear history.";
+    });
+};
 
   cancelBtn.onclick = () => {
     modal.style.display = "none";
@@ -1021,6 +1038,7 @@ function clearAllFields() {
   document.getElementById("passwordRow").style.display = "none";
   document.getElementById("togglePasswordWrapper").style.display = "none";
   document.getElementById("fileCountDisplay").textContent = "";
+  validateExtractButton();
 }
 
 function clearPasswordOnly() {
@@ -1157,10 +1175,37 @@ function loadExtractHistory() {
   fetch("/plugins/zip_manager/helpers/get_extract_history.php")
     .then(res => res.text())
     .then(data => {
-      document.getElementById("extractLogBox").innerText = data;
+      const logBox = document.getElementById("extractLogBox");
+      const clearBtn = document.getElementById("clearHistoryBtn");
+      const placeholder = document.getElementById("extractLogPlaceholder");
+      const trimmed = data.trim();
+
+      const hasRealHistory = trimmed && !/^No extraction history!?$/i.test(trimmed);
+
+      if (hasRealHistory) {
+        logBox.innerText = trimmed;
+        logBox.style.display = "block";
+        placeholder.style.display = "none"; // ✅ Hide placeholder
+        clearBtn.disabled = false;
+        clearBtn.title = "Clear extraction history";
+      } else {
+        logBox.innerText = "";
+        logBox.style.display = "none";
+        showNoHistoryMessage();
+        clearBtn.disabled = true;
+        clearBtn.title = "No history to clear";
+      }
     })
     .catch(() => {
-      document.getElementById("extractLogBox").innerText = "❌ Failed to load history.";
+      const logBox = document.getElementById("extractLogBox");
+      const clearBtn = document.getElementById("clearHistoryBtn");
+      const placeholder = document.getElementById("extractLogPlaceholder");
+
+      logBox.innerText = "❌ Failed to load history.";
+      logBox.style.display = "block";
+      placeholder.style.display = "none"; // ✅ Hide placeholder
+      clearBtn.disabled = true;
+      clearBtn.title = "No history to clear";
     });
 }
 
@@ -1169,6 +1214,7 @@ loadExtractHistory();
 
 document.addEventListener("DOMContentLoaded", () => {
   validateExtractButton();
+  loadExtractHistory();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 

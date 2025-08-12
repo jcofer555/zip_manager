@@ -234,6 +234,16 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+#archiveLogPlaceholder {
+  display: none;
+  font-family: monospace;
+  font-size: 16px;
+  padding: 8px;
+  background-color: #111111;
+  max-width: 1090px;
+  margin-top: 8px;
+}
 </style>
 
 <?php
@@ -517,7 +527,7 @@ if ($filename === 'extractor_debug.log') {
       </select>
     </div>
 
-    <button id="archiveBtn" onclick="runArchiving()" title="Select both files to archive and output directory, and enter a name">🚀 Archive</button>
+    <button id="archiveBtn" onclick="runArchiving()" title="Select both files to archive and output directory, and enter an archive name">🚀 Archive</button>
     <button onclick="clearForm()">🧹 Clear Form</button>
     <br/><br/>
     <div id="statusBox"></div>
@@ -531,10 +541,10 @@ if ($filename === 'extractor_debug.log') {
 
     <div id="historyContainer" style="margin-top: 10px;">
       <div id="archiveLogBox" style="background: #111111; padding: 10px; color: lightgray; max-height: 250px; width: 1090px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4em;"></div>
-      <div id="archiveLogPlaceholder" style="display: none; color: gray; font-style: italic; margin-top: 8px;">No archiving history!</div>
+      <div id="archiveLogPlaceholder" style="display: none; color: white; margin-top: 8px;">No archiving history!</div>
     </div>
 
-    <button onclick="cleararchiveHistory()" style="margin-top: 12px;">🧹 Clear History</button>
+    <button id="clearArchiveHistoryBtn" onclick="cleararchiveHistory()" title="No history to clear" disabled>🧹 Clear History</button>
 
     <!-- 🧨 Clear History Modal -->
     <div id="clearHistoryModal" style="display:none; margin-top:12px; background:#111111; border:1px solid orange; padding:12px; color:orange; max-width:448px;">
@@ -610,6 +620,8 @@ function cleararchiveHistory() {
   const confirmBtn = document.getElementById("clearHistoryConfirm");
   const cancelBtn = document.getElementById("clearHistoryCancel");
   const logBox = document.getElementById("archiveLogBox");
+  const placeholder = document.getElementById("archiveLogPlaceholder");
+  const clearBtn = document.getElementById("clearArchiveHistoryBtn");
 
   modal.style.display = "block";
 
@@ -618,12 +630,17 @@ function cleararchiveHistory() {
     fetch("/plugins/zip_manager/helpers/clear_archive_history.php", { method: "GET" })
       .then(res => res.text())
       .then(() => {
-        logBox.innerText = "No archiving history!";
-        logBox.style.display = "block";
+        logBox.innerText = "";
+        logBox.style.display = "none";
+        placeholder.innerText = "No archiving history!";
+        placeholder.style.display = "block";
+        clearBtn.disabled = true;
+        clearBtn.title = "No history to clear";
       })
       .catch(() => {
         logBox.innerText = "❌ Failed to clear history.";
         logBox.style.display = "block";
+        placeholder.style.display = "none";
       });
   };
 
@@ -1076,6 +1093,7 @@ function resetFormFields() {
   document.getElementById("fileCountDisplay").textContent = "";
   document.getElementById("togglePasswordWrapper").style.display = "none";
   updatePasswordVisibility();
+  validateArchiveButton();
 }
 
 function clearCheckboxes() {
@@ -1096,10 +1114,38 @@ function loadarchiveHistory() {
   fetch("/plugins/zip_manager/helpers/get_archive_history.php")
     .then(res => res.text())
     .then(data => {
-      document.getElementById("archiveLogBox").innerText = data;
+      const logBox = document.getElementById("archiveLogBox");
+      const placeholder = document.getElementById("archiveLogPlaceholder");
+      const clearBtn = document.getElementById("clearArchiveHistoryBtn");
+      const trimmed = data.trim();
+
+      const hasRealHistory = trimmed && !/^No archiving history!?$/i.test(trimmed);
+
+      if (hasRealHistory) {
+        logBox.innerText = trimmed;
+        logBox.style.display = "block";
+        placeholder.style.display = "none";
+        clearBtn.disabled = false;
+        clearBtn.title = "Clear archiving history";
+      } else {
+        logBox.innerText = "";
+        logBox.style.display = "none";
+        placeholder.innerText = "No archiving history!";
+        placeholder.style.display = "block";
+        clearBtn.disabled = true;
+        clearBtn.title = "No history to clear";
+      }
     })
     .catch(() => {
-      document.getElementById("archiveLogBox").innerText = "❌ Failed to load history.";
+      const logBox = document.getElementById("archiveLogBox");
+      const placeholder = document.getElementById("archiveLogPlaceholder");
+      const clearBtn = document.getElementById("clearArchiveHistoryBtn");
+
+      logBox.innerText = "❌ Failed to load history.";
+      logBox.style.display = "block";
+      placeholder.style.display = "none";
+      clearBtn.disabled = true;
+      clearBtn.title = "No history to clear";
     });
 }
 
@@ -1130,6 +1176,7 @@ loadarchiveHistory();
 
 document.addEventListener("DOMContentLoaded", () => {
   validateArchiveButton();
+  loadarchiveHistory();
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 
