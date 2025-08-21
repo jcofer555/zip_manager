@@ -1230,6 +1230,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const passwordInput = document.getElementById("archivePassword");
   const toggleWrapper = document.getElementById("togglePasswordWrapper");
 
+if ( typeof caPluginUpdateCheck === "function" ) {
+        caPluginUpdateCheck("zip_manager.plg",{name:"Zip Manager"});
+    }
+
   if (passwordInput && toggleWrapper) {
     passwordInput.addEventListener("input", () => {
       toggleWrapper.style.display = passwordInput.value ? "inline" : "none";
